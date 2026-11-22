@@ -47,5 +47,15 @@ unavailable or unrun checks explicitly, not as passing.
 The engineering contract permits cheap, checkout-local peripheral checks but
 reserves integrated verification for RealityEngine_CI. Rust's self-contained
 hosted workflow is an owner-approved exception, not authorization for Go.
-Propose any Go hosted workflow to the owner before adding it; it must not
-silently grow into a separate universe or be presented as parity evidence.
+**Owner decision, 2026-11-22: no exception for Go.** Hosted CI runs only
+`gofmt -l`, `go vet`, `go test -race` and `go build`. Corpus replay and the
+surface probe run locally and from RealityEngine_CI, never as hosted jobs, and
+a hosted green is never parity evidence.
+
+Followers must agree with the voters: on a certifying run, a Go `differs`,
+`unsupported` or unavailable lane blocks the release
+(RealityEngine_CI#842). Ports come from `--free-ports`, with 5850 (PE) and
+5851 (RE) reserved where a fixed port is required. K-lines are in v0.0.3 scope
+(RealityEngine_CI#603, #287), and the agent gateway is A2A
+(RealityEngine_CI#841). The plan is
+[GO_ENGINE_ROADMAP.md](https://github.com/jateeter/RealityEngine_CI/blob/main/docs/GO_ENGINE_ROADMAP.md).
