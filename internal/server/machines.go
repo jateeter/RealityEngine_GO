@@ -37,6 +37,11 @@ func machineNotFound(w http.ResponseWriter) {
 // writeError answers a route's error: its status and {"error": message}; an
 // error that is not a machine.Error is a 500.
 func writeError(w http.ResponseWriter, err error) {
+	var ve *engine.ValidationError
+	if errors.As(err, &ve) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": ve.Errors})
+		return
+	}
 	var me *machine.Error
 	if errors.As(err, &me) {
 		writeJSON(w, me.Status, map[string]string{"error": me.Message})
@@ -147,7 +152,7 @@ func withRaw(f func(r *http.Request, body []byte) (any, error)) http.HandlerFunc
 	}
 }
 
-// machineRoutes are the RE's machine routes (RealityEngine_GO#10).
+// machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10).
 func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 	return map[string]http.Handler{
 		"RE POST /api/machines": withRaw(func(_ *http.Request, body []byte) (any, error) {
@@ -202,6 +207,38 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		}),
 		"RE DELETE /api/machines/:machineId/checkpoints/:cpId": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, eng.DeleteCheckpoint(r.PathValue("machineId"), r.PathValue("cpId")))
+		}),
+		"RE GET /api/sequences": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Sequences())
+		}),
+		"RE POST /api/sequences": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.CreateSequence(body)
+		}),
+		"RE GET /api/sequences/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Sequence(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE DELETE /api/sequences/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.DeleteSequence(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE POST /api/sequences/:id/reset": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.ResetSequence(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE POST /api/sequences/:id/vectors": withBody(func(r *http.Request, body map[string]any) (any, error) {
+			return eng.AddEvent(r.PathValue("id"), body)
+		}),
+		"RE POST /api/sequences/persist": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{"success": true})
+		}),
+		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body, err := eng.SemanticBusRegistry()
+			answer(w, body, err)
+		}),
+		"RE GET /api/buses/semantic/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.SemanticBus(r.PathValue("id"))
+			answer(w, body, err)
 		}),
 		"RE GET /api/machines": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, eng.List())

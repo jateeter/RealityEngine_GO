@@ -32,6 +32,16 @@ var Implemented = map[string]bool{
 	"RE POST /api/machines/:id/checkpoints":                      true,
 	"RE POST /api/machines/:machineId/checkpoints/:cpId/restore": true,
 	"RE DELETE /api/machines/:machineId/checkpoints/:cpId":       true,
+	"RE GET /api/buses/semantic":                                 true,
+	"RE GET /api/buses/semantic/:id":                             true,
+	// The engine's sequence store (#10).
+	"RE GET /api/sequences":              true,
+	"RE POST /api/sequences":             true,
+	"RE GET /api/sequences/:id":          true,
+	"RE DELETE /api/sequences/:id":       true,
+	"RE POST /api/sequences/:id/reset":   true,
+	"RE POST /api/sequences/:id/vectors": true,
+	"RE POST /api/sequences/persist":     true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that
