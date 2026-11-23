@@ -16,6 +16,22 @@ var Implemented = map[string]bool{
 	"RE GET /api/machines/:id":        true,
 	"RE GET /api/machines/:id/export": true,
 	"RE GET /api/machines/json/list":  true,
+	// Machine writes, transitions and checkpoints (#10).
+	"RE POST /api/machines":                                      true,
+	"RE PUT /api/machines/:id":                                   true,
+	"RE PATCH /api/machines/:id":                                 true,
+	"RE DELETE /api/machines/:id":                                true,
+	"RE GET /api/machines/json/:name":                            true,
+	"RE POST /api/machines/json/import":                          true,
+	"RE POST /api/machines/:id/process":                          true,
+	"RE POST /api/machines/:id/process-universal":                true,
+	"RE POST /api/machines/process-universal/all":                true,
+	"RE POST /api/machines/:id/whatif":                           true,
+	"RE POST /api/machines/:id/whatif-universal":                 true,
+	"RE GET /api/machines/:id/checkpoints":                       true,
+	"RE POST /api/machines/:id/checkpoints":                      true,
+	"RE POST /api/machines/:machineId/checkpoints/:cpId/restore": true,
+	"RE DELETE /api/machines/:machineId/checkpoints/:cpId":       true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that
