@@ -31,6 +31,8 @@ type Engine struct {
 	// checkpoints are copies of machines as they were running, by machine id
 	// and checkpoint id.
 	checkpoints map[string]map[string]checkpoint
+	// sequences is the engine's own sequence store (/api/sequences).
+	sequences map[string]storedSequence
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -46,6 +48,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 	e := &Engine{
 		machines: map[string]*machine.Machine{}, machinesDir: machinesDir,
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
+		sequences: map[string]storedSequence{},
 	}
 	if machinesDir == "" {
 		return e, nil
