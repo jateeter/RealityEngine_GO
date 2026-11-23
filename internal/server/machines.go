@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
@@ -152,7 +153,28 @@ func withRaw(f func(r *http.Request, body []byte) (any, error)) http.HandlerFunc
 	}
 }
 
-// machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10).
+// clearAudit is the reset's opt-in flag, from the query string ("true" or
+// "1") or, without one, a JSON body's boolean clearAudit. A malformed body is
+// not a reason to refuse a reset: the flag keeps its default, false.
+func clearAudit(r *http.Request) bool {
+	if q := r.URL.Query(); q.Has("clearAudit") {
+		v := q.Get("clearAudit")
+		return v == "true" || v == "1"
+	}
+	data, err := readBody(r)
+	if err != nil {
+		return false
+	}
+	var body map[string]any
+	if json.Unmarshal(data, &body) != nil {
+		return false
+	}
+	flag, _ := body["clearAudit"].(bool)
+	return flag
+}
+
+// machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10)
+// and its engine routes (#13).
 func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 	return map[string]http.Handler{
 		"RE POST /api/machines": withRaw(func(_ *http.Request, body []byte) (any, error) {
@@ -231,6 +253,25 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		}),
 		"RE POST /api/sequences/persist": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"success": true})
+		}),
+		"RE POST /api/engine/process": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.ProcessAll(numbers(body["vector"])), nil
+		}),
+		"RE POST /api/engine/reset": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Reset(clearAudit(r)))
+		}),
+		"RE GET /api/engine/history": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			writeJSON(w, http.StatusOK, eng.History(limit))
+		}),
+		"RE GET /api/engine/stats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Stats())
+		}),
+		"RE GET /api/engine/active": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Active())
+		}),
+		"RE GET /api/engine/clock": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Clock())
 		}),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()

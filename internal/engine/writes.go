@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jateeter/RealityEngine_GO/internal/instance"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
 )
 
@@ -43,20 +43,8 @@ var clock = machine.Clock{
 	MintID: func() string { return newUUID() },
 }
 
-// newUUID is a version 7 UUID: the time in ms, then random bits.
-func newUUID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic(fmt.Sprintf("crypto/rand: %v", err))
-	}
-	ms := uint64(time.Now().UnixMilli())
-	for i := 0; i < 6; i++ {
-		b[i] = byte(ms >> (40 - 8*i))
-	}
-	b[6] = b[6]&0x0f | 0x70
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
+// newUUID is a version 7 UUID.
+func newUUID() string { return instance.NewV7() }
 
 func mintMachineID() string { return "machine-" + newUUID() }
 
@@ -101,6 +89,7 @@ func (e *Engine) admit(m *machine.Machine) {
 		e.dimension = max(e.dimension, m.InputOffset+m.InputLength, output.Offset+output.Length, input.Offset)
 	}
 	e.machines[m.ID] = m
+	e.mappingVersion++
 }
 
 // readmit replaces the machine at id with m, keeping the resident one's
@@ -147,6 +136,7 @@ func (e *Engine) Delete(id string) (map[string]any, error) {
 		return nil, machine.NotFound("machine %s not found", id)
 	}
 	delete(e.machines, id)
+	e.mappingVersion++
 	return map[string]any{"success": true, "id": id}, nil
 }
 

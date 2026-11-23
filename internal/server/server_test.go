@@ -46,6 +46,8 @@ func TestPortFromEnv(t *testing.T) {
 
 func mustHandler(t *testing.T, component string) http.Handler {
 	t.Helper()
+	// A minted, unpersisted clock: never the developer's allocated instance.
+	t.Setenv("INSTANCE_UUID", "")
 	h, err := handler(component)
 	if err != nil {
 		t.Fatal(err)
