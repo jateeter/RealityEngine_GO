@@ -47,10 +47,14 @@ unavailable or unrun checks explicitly, not as passing.
 The engineering contract permits cheap, checkout-local peripheral checks but
 reserves integrated verification for RealityEngine_CI. Rust's self-contained
 hosted workflow is an owner-approved exception, not authorization for Go.
-**Owner decision, 2026-11-22: no exception for Go.** Hosted CI runs only
-`gofmt -l`, `go vet`, `go test -race` and `go build`. Corpus replay and the
-surface probe run locally and from RealityEngine_CI, never as hosted jobs, and
-a hosted green is never parity evidence.
+**Owner decision, 2026-11-22: no exception for Go.** **2026-11-23: Go's
+regression follows Rust's path into RealityEngine_CI.** This repository's only
+hosted check is GitGuardian. Run `gofmt -l`, `go vet`, `go test -race` and
+`go build` locally before every PR. RealityEngine_CI's `regression-test.sh
+--execute --follower rust,go` builds the engines with the pinned Go, checks
+their provenance, and holds `go-1` against the voters
+(`scripts/follower-conformance.sh --follower go`). Corpus replay and the surface
+probe run locally and from RealityEngine_CI, never as hosted jobs.
 
 Followers must agree with the voters: on a certifying run, a Go `differs`,
 `unsupported` or unavailable lane blocks the release
