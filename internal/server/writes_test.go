@@ -218,3 +218,25 @@ func TestCheckpoints(t *testing.T) {
 		t.Fatalf("%v", out)
 	}
 }
+
+// sendAny is send for a body that may not be an object.
+func sendAny(t *testing.T, h http.Handler, method, path string) (int, any) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+	var out any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("%s %s: %v: %s", method, path, err, rec.Body)
+	}
+	return rec.Code, out
+}
+
+func httpGetList(t *testing.T, h http.Handler, path string) []any {
+	t.Helper()
+	_, out := sendAny(t, h, "GET", path)
+	l, ok := out.([]any)
+	if !ok {
+		t.Fatalf("%s: not a list: %v", path, out)
+	}
+	return l
+}

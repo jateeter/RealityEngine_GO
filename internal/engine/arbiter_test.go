@@ -46,3 +46,23 @@ func TestATrajectoryEntryIsSparseAndLossless(t *testing.T) {
 		t.Fatalf("%+v", e)
 	}
 }
+
+func TestPhaseDetailMeasuresOnlyWhenOn(t *testing.T) {
+	e, err := New("", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := e.PhaseTotals(); ok {
+		t.Fatal("off: the phase lines are absent")
+	}
+	if _, err := e.SetControl("phaseDetail", map[string]any{"value": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Perceive(map[string]any{"vector": []any{1.0}}); err != nil {
+		t.Fatal(err)
+	}
+	seconds, steps, ok := e.PhaseTotals()
+	if !ok || steps != 1 || len(seconds) != 5 {
+		t.Fatalf("%v %d %v", seconds, steps, ok)
+	}
+}

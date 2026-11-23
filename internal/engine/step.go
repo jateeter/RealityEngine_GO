@@ -50,6 +50,7 @@ type stepControls struct {
 	includePerceptualSpace bool
 	arbitrationRetention   bool
 	arbitrationWindow      int
+	phaseDetail            bool
 }
 
 func defaultControls() stepControls {
@@ -111,6 +112,10 @@ type stepState struct {
 	lastArbitration []arbitrationRecord
 	retained        map[int]retainedStep
 	arbitration     arbitrationRegistry
+	// phaseTime sums each step phase over the measured steps, counters since
+	// boot that a reset does not clear.
+	phaseTime     [5]time.Duration
+	measuredSteps uint64
 }
 
 func newStepState(machinesDir string) stepState {
@@ -436,8 +441,11 @@ type composed struct {
 // runPhases runs one step over the space as it now stands. The caller holds
 // the write lock.
 func (e *Engine) runPhases(n int, override string) (*step, error) {
+	// B0: whether this step is timed is decided here, once.
+	timer := newPhaseTimer(e.steps.controls.phaseDetail)
 	subs := e.subscriptions()
 	isre := sparse(n, e.steps.space)
+	timer.boundary(0)
 
 	// Compose in parallel; the WaitGroup is the join.
 	ids := e.machineIDs()
@@ -465,6 +473,7 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	}
 	close(work)
 	wg.Wait()
+	timer.boundary(1)
 
 	machineResults := map[string]map[string]any{}
 	var merges []mergeOperation
@@ -698,6 +707,7 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 		}
 		return a.kind < b.kind
 	})
+	timer.boundary(2)
 	s := &step{
 		number: n, timestamp: clock.NowMS(), machineResults: machineResults, activeRegions: regions,
 		mergeBatch: merges, eventBus: writes, space: append([]float64{}, space...),
@@ -713,11 +723,17 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	e.steps.retainArbitration(n, lamport, records)
 	e.steps.lastArbitration = records
 	e.completedStep = n
+	timer.boundary(3)
 	e.steps.publish()
-	e.steps.history = append([]*step{s}, e.steps.history...)
-	if len(e.steps.history) > e.steps.controls.historyLimit {
-		e.steps.history = e.steps.history[:e.steps.controls.historyLimit]
+	timer.boundary(4)
+	if timer.on {
+		for i, d := range timer.spent {
+			e.steps.phaseTime[i] += d
+		}
+		e.steps.measuredSteps++
 	}
+	e.steps.history = append([]*step{s}, e.steps.history...)
+	e.steps.trimHistory()
 	return s, nil
 }
 

@@ -56,6 +56,17 @@ var Implemented = map[string]bool{
 	"RE GET /api/engine/osre-history":  true,
 	"RE GET /api/engine/steps/:n/pair": true,
 	"RE GET /api/arbitration":          true,
+	// The control pathway, the runtime views and the diagnostic (#13, slice 3).
+	"RE GET /api/engine/config":             true,
+	"RE GET /api/engine/config/:control":    true,
+	"RE PUT /api/engine/config/:control":    true,
+	"RE DELETE /api/engine/config/:control": true,
+	"RE GET /api/runtime/options":           true,
+	"RE PATCH /api/runtime/options":         true,
+	"RE GET /api/runtime/metrics":           true,
+	"RE GET /api/runtime/vector-space":      true,
+	"RE GET /api/runtime/storage-footprint": true,
+	"RE POST /api/perception/diagnostic":    true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that

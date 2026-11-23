@@ -334,6 +334,38 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			body, err := eng.Arbitration(queryValue(r, "step"))
 			answer(w, body, err)
 		}),
+		"RE GET /api/engine/config": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Controls())
+		}),
+		"RE GET /api/engine/config/:control": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Control(r.PathValue("control"))
+			answer(w, body, err)
+		}),
+		"RE PUT /api/engine/config/:control": withBody(func(r *http.Request, body map[string]any) (any, error) {
+			return eng.SetControl(r.PathValue("control"), body)
+		}),
+		"RE DELETE /api/engine/config/:control": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.ResetControl(r.PathValue("control"))
+			answer(w, body, err)
+		}),
+		"RE GET /api/runtime/options": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.RuntimeOptions())
+		}),
+		"RE PATCH /api/runtime/options": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.PatchRuntimeOptions(body)
+		}),
+		"RE GET /api/runtime/metrics": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.RuntimeMetrics())
+		}),
+		"RE GET /api/runtime/vector-space": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.VectorSpace())
+		}),
+		"RE GET /api/runtime/storage-footprint": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.StorageFootprint())
+		}),
+		"RE POST /api/perception/diagnostic": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.Diagnostic(numbers(body["universalInputSpace"]))
+		}),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()
 			answer(w, body, err)
