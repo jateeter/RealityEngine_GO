@@ -32,7 +32,7 @@ func (e LoadError) Error() string { return e.RelFile + ": " + e.Err.Error() }
 // its file name. A file that fails is reported and skipped; two files whose
 // stems give the same id are an error for the second (corpus file names are
 // globally unique, RealityEngine_Machines enforces it).
-func LoadDir(dir string) ([]Loaded, []LoadError, error) {
+func LoadDir(dir string, nowMS int64) ([]Loaded, []LoadError, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -67,6 +67,7 @@ func LoadDir(dir string) ([]Loaded, []LoadError, error) {
 		base := filepath.Base(path)
 		m.ID = CanonicalID(strings.TrimSuffix(base, ".json"))
 		m.SourceFile = base
+		m.LoadedAtMS = nowMS
 		if other, dup := byID[m.ID]; dup {
 			failed = append(failed, LoadError{rel, fmt.Errorf("id %s is already held by %s", m.ID, other)})
 			continue

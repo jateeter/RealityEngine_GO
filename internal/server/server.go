@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/surface"
 )
 
@@ -84,6 +85,13 @@ func handler(component string) (http.Handler, error) {
 	switch component {
 	case surface.RE:
 		handlers["RE GET /api/health"] = health
+		eng, err := engine.FromEnvironment()
+		if err != nil {
+			return nil, err
+		}
+		for id, h := range machineRoutes(eng) {
+			handlers[id] = h
+		}
 	case surface.PE:
 		handlers["PE GET /api/health"] = health
 	}

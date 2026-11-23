@@ -1,0 +1,184 @@
+// Package engine is the Reality Engine's state: the resident machines and the
+// corpus directory they came from. Routes read it under a read lock and change
+// it under a write lock.
+package engine
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"log"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jateeter/RealityEngine_GO/internal/machine"
+)
+
+// Engine holds the resident machines.
+type Engine struct {
+	mu          sync.RWMutex
+	machines    map[string]*machine.Machine
+	machinesDir string
+}
+
+// New loads every machine under machinesDir (MACHINES_DIR). An empty
+// directory name starts an engine with no machines. A file that does not load
+// is logged with its reason and skipped, never silently.
+func New(machinesDir string) (*Engine, error) {
+	e := &Engine{machines: map[string]*machine.Machine{}, machinesDir: machinesDir}
+	if machinesDir == "" {
+		return e, nil
+	}
+	loaded, failed, err := machine.LoadDir(machinesDir, time.Now().UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range loaded {
+		e.machines[l.Machine.ID] = l.Machine
+	}
+	for _, f := range failed {
+		log.Printf("reality-engine: not loaded: %v", f)
+	}
+	log.Printf("reality-engine: %d machines loaded from %s, %d files not loaded", len(loaded), machinesDir, len(failed))
+	return e, nil
+}
+
+// FromEnvironment is New(MACHINES_DIR).
+func FromEnvironment() (*Engine, error) { return New(os.Getenv("MACHINES_DIR")) }
+
+// List is GET /api/machines: every resident machine, mapped or not, in
+// canonical order (metadata.domain, then name, then id), in the list form.
+func (e *Engine) List() map[string]any {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	ms := make([]*machine.Machine, 0, len(e.machines))
+	for _, m := range e.machines {
+		ms = append(ms, m)
+	}
+	machine.CanonicalOrder(ms)
+	views := make([]any, len(ms))
+	for i, m := range ms {
+		views[i] = m.View(false)
+	}
+	return map[string]any{"machines": views}
+}
+
+// Machine is GET /api/machines/:id: the machine in full, as it is running.
+func (e *Engine) Machine(id string) (map[string]any, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	m, ok := e.machines[id]
+	if !ok {
+		return nil, false
+	}
+	return map[string]any{"machine": m.View(true)}, true
+}
+
+// Export is GET /api/machines/:id/export: the corpus document.
+func (e *Engine) Export(id string) (map[string]any, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	m, ok := e.machines[id]
+	if !ok {
+		return nil, false
+	}
+	return map[string]any{"version": "1.0.0", "machine": m.CorpusDocument()}, true
+}
+
+// Catalog is GET /api/machines/json/list: every .json file under the corpus
+// directory, recursively, in path order, with its relFile. Each row carries
+// the corpus OWL semantics (semanticsIri, semanticsHash) when the ABox
+// manifest names it. Without a corpus directory the catalog is empty.
+func (e *Engine) Catalog() (map[string]any, error) {
+	rows := []any{}
+	if e.machinesDir == "" {
+		return map[string]any{"machines": rows}, nil
+	}
+	if _, err := os.Stat(e.machinesDir); err != nil {
+		return map[string]any{"machines": rows}, nil
+	}
+	var paths []string
+	err := filepath.WalkDir(e.machinesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type().IsRegular() && strings.HasSuffix(d.Name(), ".json") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not read %s: %w", e.machinesDir, err)
+	}
+	sort.Strings(paths)
+	semantics := semanticsManifest(e.machinesDir)
+	for _, path := range paths {
+		rel, err := filepath.Rel(e.machinesDir, path)
+		if err != nil {
+			continue
+		}
+		rel = filepath.ToSlash(rel)
+		base := filepath.Base(path)
+		row := map[string]any{
+			"filename": base, "relFile": rel, "name": strings.TrimSuffix(base, ".json"),
+			"description": "", "version": "1.0.0", "metadata": map[string]any{}, "sequenceCount": 0,
+		}
+		// Manifest keys are "<domain>/<stem>": domains/<d>/X.json is d/X, else core/X.
+		key := "core/" + rel
+		if strings.HasPrefix(rel, "domains/") {
+			key = strings.TrimPrefix(rel, "domains/")
+		}
+		key = strings.TrimSuffix(key, ".json")
+		if entry, ok := semantics[key].(map[string]any); ok {
+			row["semanticsIri"] = entry["iri"]
+			row["semanticsHash"] = entry["sha256"]
+		}
+		rows = append(rows, row)
+	}
+	return map[string]any{"machines": rows}, nil
+}
+
+// semanticsManifest is the corpus ABox manifest's "machines" object:
+// SEMANTICS_MANIFEST, else the first semantics/abox-manifest.json found walking
+// up to six levels from the machines directory. Nil when there is none.
+func semanticsManifest(machinesDir string) map[string]any {
+	path := os.Getenv("SEMANTICS_MANIFEST")
+	if path == "" {
+		dir, err := filepath.Abs(machinesDir)
+		if err != nil {
+			return nil
+		}
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = resolved
+		}
+		for i := 0; i < 6; i++ {
+			candidate := filepath.Join(dir, "semantics", "abox-manifest.json")
+			if st, err := os.Stat(candidate); err == nil && st.Mode().IsRegular() {
+				path = candidate
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var doc map[string]any
+	if json.Unmarshal(data, &doc) != nil {
+		return nil
+	}
+	machines, _ := doc["machines"].(map[string]any)
+	return machines
+}
