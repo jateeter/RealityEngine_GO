@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
@@ -173,6 +174,37 @@ func clearAudit(r *http.Request) bool {
 	return flag
 }
 
+// queryValue is a query parameter, nil when absent.
+func queryValue(r *http.Request, key string) *string {
+	q := r.URL.Query()
+	if !q.Has(key) {
+		return nil
+	}
+	v := q.Get(key)
+	return &v
+}
+
+// trajectory serves an ISRE or OSRE history: from and limit are integers,
+// negative read as 0.
+func trajectory(eng *engine.Engine, isre bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var bounds [2]int
+		for i, key := range []string{"from", "limit"} {
+			raw := r.URL.Query().Get(key)
+			if raw == "" {
+				continue
+			}
+			n, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				writeError(w, machine.BadRequest("%s must be an integer", key))
+				return
+			}
+			bounds[i] = int(max(n, 0))
+		}
+		writeJSON(w, http.StatusOK, eng.Trajectory(isre, bounds[0], bounds[1]))
+	}
+}
+
 // machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10)
 // and its engine routes (#13).
 func machineRoutes(eng *engine.Engine) map[string]http.Handler {
@@ -272,6 +304,35 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		}),
 		"RE GET /api/engine/clock": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, eng.Clock())
+		}),
+		"RE POST /api/perceive": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.Perceive(body)
+		}),
+		"RE POST /api/perception/observe": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return map[string]any{
+				"success": true, "inputEvent": numbers(body["data"]), "transformations": []any{},
+				"processingTimestamp": time.Now().UnixMilli(),
+			}, nil
+		}),
+		"RE GET /api/engine/isre-history": trajectory(eng, true),
+		"RE GET /api/engine/osre-history": trajectory(eng, false),
+		"RE GET /api/engine/steps/:n/pair": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n, err := engine.StepNumber(r.PathValue("n"))
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			timeout, err := engine.PairTimeout(queryValue(r, "timeoutMs"))
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			body, err := eng.StepPair(n, timeout)
+			answer(w, body, err)
+		}),
+		"RE GET /api/arbitration": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Arbitration(queryValue(r, "step"))
+			answer(w, body, err)
 		}),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()

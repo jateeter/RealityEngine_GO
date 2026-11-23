@@ -103,7 +103,8 @@ func nonNilVector(v []float64) []float64 {
 }
 
 // Reset is POST /api/engine/reset: every machine back to its initial Reality
-// Events. clearAudit is accepted and reported; this engine keeps no semantic
+// Events, and the step state to its start (step numbers restart, the space and
+// the trajectory histories empty, waiters wake). clearAudit is accepted and reported; this engine keeps no semantic
 // audit yet, so there is nothing for it to clear. The process audit trail and
 // the clock's lamport survive a reset.
 func (e *Engine) Reset(clearAudit bool) map[string]any {
@@ -112,6 +113,7 @@ func (e *Engine) Reset(clearAudit bool) map[string]any {
 	for _, m := range e.machines {
 		m.Reset()
 	}
+	e.steps.reset()
 	e.completedStep = -1
 	return map[string]any{"success": true, "auditCleared": clearAudit}
 }
@@ -146,7 +148,7 @@ func (e *Engine) Stats() map[string]any {
 	return map[string]any{"stats": map[string]any{
 		"machineCount": len(e.machines), "sequenceCount": sequences, "vectorCount": events,
 		"dimension": e.dimension, "requiredDimension": required,
-		"historySize": len(e.history), "mappingVersion": e.mappingVersion,
+		"historySize": len(e.steps.history), "mappingVersion": e.mappingVersion,
 	}}
 }
 

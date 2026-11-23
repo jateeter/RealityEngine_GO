@@ -71,12 +71,17 @@ func TestPostVersionsAResidentNameAndDeleteFreesIt(t *testing.T) {
 // minted when held.
 func TestPostKeepsAFreeDeclaredID(t *testing.T) {
 	h := machinesHandler(t)
-	declared := strings.Replace(fooMachine, `{"version": "1.0.0",`, `{"version": "1.0.0", "id": "machine-mine",`, 1)
+	declared := strings.Replace(fooMachine, `"machine": {"name": "Foo",`, `"machine": {"id": "machine-mine", "name": "Foo",`, 1)
 	if _, out := send(t, h, "POST", "/api/machines", declared); out["machine"].(map[string]any)["id"] != "machine-mine" {
 		t.Fatalf("%v", out)
 	}
 	if _, out := send(t, h, "POST", "/api/machines", declared); out["machine"].(map[string]any)["id"] == "machine-mine" {
 		t.Fatalf("a held id was reused: %v", out)
+	}
+	// An id on the envelope is not the machine's declaration.
+	onEnvelope := strings.Replace(fooMachine, `{"version": "1.0.0",`, `{"version": "1.0.0", "id": "machine-envelope",`, 1)
+	if _, out := send(t, h, "POST", "/api/machines", onEnvelope); out["machine"].(map[string]any)["id"] == "machine-envelope" {
+		t.Fatalf("an envelope id was taken as declared: %v", out)
 	}
 }
 
