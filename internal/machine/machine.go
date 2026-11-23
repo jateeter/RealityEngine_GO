@@ -153,10 +153,9 @@ func Parse(data []byte) (*Machine, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, badRequest("machine.name is required and must not be empty")
 	}
-	id := str(root["id"], "")
-	if id == "" {
-		id = str(obj["id"], "")
-	}
+	// A declared id is the machine object's own: an envelope's id is not one
+	// (C++ and LSP read machine.id only; the corpus declares ids there).
+	id := str(obj["id"], "")
 	mapping, _ := obj["perceptualMapping"].(map[string]any)
 	inputRegion, _ := mapping["input"].(map[string]any)
 

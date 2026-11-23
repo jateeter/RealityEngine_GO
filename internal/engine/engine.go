@@ -43,6 +43,9 @@ type Engine struct {
 	// completedStep is the newest committed step, -1 before the first since
 	// boot or reset.
 	completedStep int
+	// steps is the perceptual space, the trajectory histories and the
+	// arbiter (step.go).
+	steps stepState
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -59,6 +62,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		machines: map[string]*machine.Machine{}, machinesDir: machinesDir,
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
+		steps: newStepState(machinesDir),
 	}
 	if machinesDir == "" {
 		return e, nil

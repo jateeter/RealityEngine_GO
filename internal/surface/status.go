@@ -49,6 +49,13 @@ var Implemented = map[string]bool{
 	"RE GET /api/engine/stats":    true,
 	"RE GET /api/engine/active":   true,
 	"RE GET /api/engine/clock":    true,
+	// The step path and arbitration (#13, slice 2).
+	"RE POST /api/perceive":            true,
+	"RE POST /api/perception/observe":  true,
+	"RE GET /api/engine/isre-history":  true,
+	"RE GET /api/engine/osre-history":  true,
+	"RE GET /api/engine/steps/:n/pair": true,
+	"RE GET /api/arbitration":          true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that
