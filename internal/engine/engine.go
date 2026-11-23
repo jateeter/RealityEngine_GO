@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,13 +24,29 @@ type Engine struct {
 	mu          sync.RWMutex
 	machines    map[string]*machine.Machine
 	machinesDir string
+	// dimension is the perceptual space's width: VECTOR_DIMENSION, grown to
+	// fit every machine admitted. A versioned machine's regions are appended
+	// at its end.
+	dimension int
+	// checkpoints are copies of machines as they were running, by machine id
+	// and checkpoint id.
+	checkpoints map[string]map[string]checkpoint
 }
 
-// New loads every machine under machinesDir (MACHINES_DIR). An empty
-// directory name starts an engine with no machines. A file that does not load
-// is logged with its reason and skipped, never silently.
-func New(machinesDir string) (*Engine, error) {
-	e := &Engine{machines: map[string]*machine.Machine{}, machinesDir: machinesDir}
+// DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
+// not set.
+const DefaultDimension = 7680
+
+// New loads every machine under machinesDir (MACHINES_DIR) into a space of
+// the given dimension. An empty directory name starts an engine with no
+// machines. A file that does not load is logged with its reason and skipped,
+// never silently. Boot ingests each file as POST /api/machines would, under
+// its canonical id, so a name held twice is versioned the same way.
+func New(machinesDir string, dimension int) (*Engine, error) {
+	e := &Engine{
+		machines: map[string]*machine.Machine{}, machinesDir: machinesDir,
+		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
+	}
 	if machinesDir == "" {
 		return e, nil
 	}
@@ -38,7 +55,7 @@ func New(machinesDir string) (*Engine, error) {
 		return nil, err
 	}
 	for _, l := range loaded {
-		e.machines[l.Machine.ID] = l.Machine
+		e.ingest(l.Machine)
 	}
 	for _, f := range failed {
 		log.Printf("reality-engine: not loaded: %v", f)
@@ -47,8 +64,15 @@ func New(machinesDir string) (*Engine, error) {
 	return e, nil
 }
 
-// FromEnvironment is New(MACHINES_DIR).
-func FromEnvironment() (*Engine, error) { return New(os.Getenv("MACHINES_DIR")) }
+// FromEnvironment is New(MACHINES_DIR, VECTOR_DIMENSION), the dimension
+// DefaultDimension when unset or not a whole number.
+func FromEnvironment() (*Engine, error) {
+	dimension := DefaultDimension
+	if v, err := strconv.Atoi(os.Getenv("VECTOR_DIMENSION")); err == nil && v >= 0 {
+		dimension = v
+	}
+	return New(os.Getenv("MACHINES_DIR"), dimension)
+}
 
 // List is GET /api/machines: every resident machine, mapped or not, in
 // canonical order (metadata.domain, then name, then id), in the list form.
