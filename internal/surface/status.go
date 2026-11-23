@@ -42,6 +42,13 @@ var Implemented = map[string]bool{
 	"RE POST /api/sequences/:id/reset":   true,
 	"RE POST /api/sequences/:id/vectors": true,
 	"RE POST /api/sequences/persist":     true,
+	// Engine-wide processing, its audit trail and the clock (#13, slice 1).
+	"RE POST /api/engine/process": true,
+	"RE POST /api/engine/reset":   true,
+	"RE GET /api/engine/history":  true,
+	"RE GET /api/engine/stats":    true,
+	"RE GET /api/engine/active":   true,
+	"RE GET /api/engine/clock":    true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that

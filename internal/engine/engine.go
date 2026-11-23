@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jateeter/RealityEngine_GO/internal/instance"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
 )
 
@@ -33,6 +34,15 @@ type Engine struct {
 	checkpoints map[string]map[string]checkpoint
 	// sequences is the engine's own sequence store (/api/sequences).
 	sequences map[string]storedSequence
+	// instance is the instance UUID and Lamport clock.
+	instance *instance.Clock
+	// history is the /api/engine/process audit trail, newest first.
+	history []any
+	// mappingVersion is bumped on every machine admitted or removed.
+	mappingVersion int
+	// completedStep is the newest committed step, -1 before the first since
+	// boot or reset.
+	completedStep int
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -48,7 +58,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 	e := &Engine{
 		machines: map[string]*machine.Machine{}, machinesDir: machinesDir,
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
-		sequences: map[string]storedSequence{},
+		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
 	}
 	if machinesDir == "" {
 		return e, nil
@@ -68,13 +78,27 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 }
 
 // FromEnvironment is New(MACHINES_DIR, VECTOR_DIMENSION), the dimension
-// DefaultDimension when unset or not a whole number.
+// DefaultDimension when unset or not a whole number, under the instance clock
+// INSTANCE_UUID and INSTANCE_CLOCK_DIR give. The clock boots first, so an
+// allocated instance that cannot keep its clock, or whose UUID another live
+// process holds, fails at once rather than after the corpus loads.
 func FromEnvironment() (*Engine, error) {
+	c, err := instance.Boot()
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("reality-engine: instance %s, lamport %d", c.Instance(), c.Lamport())
 	dimension := DefaultDimension
 	if v, err := strconv.Atoi(os.Getenv("VECTOR_DIMENSION")); err == nil && v >= 0 {
 		dimension = v
 	}
-	return New(os.Getenv("MACHINES_DIR"), dimension)
+	e, err := New(os.Getenv("MACHINES_DIR"), dimension)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	e.instance = c
+	return e, nil
 }
 
 // List is GET /api/machines: every resident machine, mapped or not, in
