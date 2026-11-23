@@ -32,3 +32,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Engine binaries, built by RealityEngine_CI's build step (go build -o bin/...)
+/bin/
