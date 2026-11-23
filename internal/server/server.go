@@ -13,13 +13,20 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/jateeter/RealityEngine_GO/internal/surface"
 )
 
 const version = "0.0.3-dev"
 
-// Run starts a local bootstrap service until the context is cancelled.
-func Run(ctx context.Context, portVariable string) error {
+// Run starts a component's service (surface.RE or surface.PE) until the
+// context is cancelled.
+func Run(ctx context.Context, component, portVariable string) error {
 	port, err := portFromEnv(portVariable)
+	if err != nil {
+		return err
+	}
+	h, err := handler(component)
 	if err != nil {
 		return err
 	}
@@ -30,7 +37,7 @@ func Run(ctx context.Context, portVariable string) error {
 		return fmt.Errorf("listen on %s: %w", address, err)
 	}
 	log.Printf("bootstrap service listening on http://%s", listener.Addr())
-	return serve(ctx, listener)
+	return serve(ctx, listener, h)
 }
 
 func portFromEnv(name string) (string, error) {
@@ -50,9 +57,20 @@ func portFromEnv(name string) (string, error) {
 	return strconv.Itoa(port), nil
 }
 
-func handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
+// handler serves the component's implemented routes and answers every other
+// route the specification defines for it with the 501 unsupported envelope
+// (SURFACE_SPEC "An unimplemented route answers unsupported"). Any other path
+// is a plain 404.
+func handler(component string) (http.Handler, error) {
+	layers := surface.Layers(component)
+	if layers == nil {
+		return nil, fmt.Errorf("unknown component %q", component)
+	}
+	inv, err := surface.Load()
+	if err != nil {
+		return nil, err
+	}
+	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(struct {
 			Status    string `json:"status"`
@@ -62,12 +80,32 @@ func handler() http.Handler {
 			log.Printf("write health response: %v", err)
 		}
 	})
-	return mux
+	handlers := map[string]http.Handler{}
+	switch component {
+	case surface.RE:
+		handlers["RE GET /api/health"] = health
+	case surface.PE:
+		handlers["PE GET /api/health"] = health
+	}
+	router, err := surface.NewRouter(inv, layers, surface.Implemented, handlers)
+	if err != nil {
+		return nil, err
+	}
+	// Anything else, including a specified path with a method the
+	// specification doesn't give it, is a plain 404 with the error envelope.
+	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": "Not found"}); err != nil {
+			log.Printf("write not-found response: %v", err)
+		}
+	})
+	return router, nil
 }
 
-func serve(ctx context.Context, listener net.Listener) error {
+func serve(ctx context.Context, listener net.Listener, h http.Handler) error {
 	srv := &http.Server{
-		Handler:           handler(),
+		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -97,10 +135,10 @@ func serve(ctx context.Context, listener net.Listener) error {
 }
 
 // Main runs a bootstrap service and reports startup or shutdown errors.
-func Main(portVariable string) {
+func Main(component, portVariable string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := Run(ctx, portVariable); err != nil {
+	if err := Run(ctx, component, portVariable); err != nil {
 		log.Print(err)
 		os.Exit(1)
 	}

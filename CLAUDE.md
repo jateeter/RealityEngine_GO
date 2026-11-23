@@ -30,10 +30,12 @@ Owner decisions, 2026-11-22:
 
 - `cmd/reality-engine`: the RE entrypoint. It reads `REALITY_ENGINE_PORT`.
 - `cmd/perception-engine`: the PE entrypoint. It reads `PERCEPTION_ENGINE_PORT`.
-- `internal/server`: the shared lifecycle (loopback listener, graceful drain on SIGINT/SIGTERM) and `GET /api/health` in the spec's shape `{status, timestamp, version}`.
+- `internal/server`: the shared lifecycle (loopback listener, graceful drain on SIGINT/SIGTERM), each component's implemented handlers (today `GET /api/health` in the spec's shape `{status, timestamp, version}`), and a JSON 404 for anything the spec doesn't define.
+- `internal/surface`: the route inventory of `SURFACE_SPEC.md` (`spec-routes.json`, embedded, digest-checked, same schema and `routesSha256` as Rust's), the router (literal segments beat `:param`s, so the spec's overlapping routes resolve, which `ServeMux` refuses), and the specified 501 `unsupported` envelope for every route not yet implemented. `Implemented` lists the routes served, and `groupIssues` names the issue for every other route.
+- `cmd/refresh-surface`: regenerates `internal/surface/spec-routes.json` and `conformance/SURFACE_STATUS.md` from a committed `../RealityEngine_CI/SURFACE_SPEC.md`. `-check` reports drift and writes nothing. It is local maintenance, never a hosted step, because it reads a sibling checkout.
 - `go.mod`, `.go-version`: Go 1.27.3, the one pin for every lane. There are no third-party dependencies. Adding one is a reviewed decision, not a convenience.
 
-Today the commands serve health only (bootstrap, Go#4). Extend this map as packages land.
+Today the commands serve health, and answer every other specified route `unsupported` (Go#7). Implementing a route means adding its handler and its id to `surface.Implemented`, then regenerating the status. Extend this map as packages land.
 
 ## Build and validation
 
