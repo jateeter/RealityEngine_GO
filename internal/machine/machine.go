@@ -90,6 +90,9 @@ type Machine struct {
 	// SourceFile is the corpus file name it was loaded from; empty for a
 	// machine registered from a request body. Not serialised.
 	SourceFile string
+	// LoadedAtMS is when the machine was loaded: a declared output's
+	// timestamp in the full view, as C++ stamps it.
+	LoadedAtMS int64
 }
 
 // SequenceIDs is the machine's sequences in id order.

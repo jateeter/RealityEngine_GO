@@ -10,8 +10,12 @@ import (
 // Listing a route here establishes presence, not behavioral parity: agreement
 // with the voters is RealityEngine_CI's follower lane (#12).
 var Implemented = map[string]bool{
-	"RE GET /api/health": true,
-	"PE GET /api/health": true,
+	"RE GET /api/health":              true,
+	"PE GET /api/health":              true,
+	"RE GET /api/machines":            true,
+	"RE GET /api/machines/:id":        true,
+	"RE GET /api/machines/:id/export": true,
+	"RE GET /api/machines/json/list":  true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that

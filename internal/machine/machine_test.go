@@ -300,7 +300,7 @@ func TestLoadDirIsRecursiveAndNamesFailures(t *testing.T) {
 	write("domains/health/Deep.json", `{"name": "Deep", "sequences": []}`)
 	write("domains/health/Bad.json", `{"name": "Bad", "sequences": [{"id": "s", "vectors": [], "events": [{"id": "a"}]}]}`)
 	write("notes.txt", `not a machine`)
-	loaded, failed, err := LoadDir(dir)
+	loaded, failed, err := LoadDir(dir, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestTheCorpusLoads(t *testing.T) {
 	if _, err := os.Stat(dir); err != nil {
 		t.Skip("no RealityEngine_Machines checkout beside this one")
 	}
-	loaded, failed, err := LoadDir(dir)
+	loaded, failed, err := LoadDir(dir, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
