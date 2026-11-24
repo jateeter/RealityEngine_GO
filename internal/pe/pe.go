@@ -75,19 +75,40 @@ type PE struct {
 	catalog  map[string]map[string]any
 	hub      *stream.Hub
 	pushes   *pushes
+	// catalogLoaded is false until the RE's machines were first read.
+	catalogLoaded      bool
+	catalogRefreshedAt int64
+	dispatch           dispatchState
+	localAIBase        string
+	integrations       *Integrations
+	localAI            *localAILedger
+	mqttMu             sync.Mutex
+	mqtt               *mqttBridge
 }
 
 func nowMS() int64 { return time.Now().UnixMilli() }
 
 // New is a PE of the given dimension driving the RE at reURL.
 func New(dimension int, reURL string) *PE {
-	return &PE{
+	p := &PE{
 		dimension: dimension, persistent: make([]float64, dimension), matchAlgorithm: "gte",
 		reURL: strings.TrimSuffix(reURL, "/"), sources: map[string]*Source{}, testStep: map[string]int{},
 		contention: newContention(), mergeOnly: true, rng: uint64(nowMS()) | 1, walk: map[string][]float64{},
 		autoIntervalMS: autoIntervalMS, client: &http.Client{Timeout: 120 * time.Second},
 		osreFold: map[int64][2]string{}, catalog: map[string]map[string]any{}, hub: stream.NewHub(), pushes: newPushes(),
 	}
+	p.integrations = integrationsFromEnvironment()
+	p.localAI = &localAILedger{}
+	p.localAIBase = strings.TrimSuffix(p.integrations.localAIBaseURL, "/")
+	p.dispatch = newDispatch(p.localAIBase)
+	return p
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 // flagOn reads PE_SOURCE_BOOTSTRAP / PE_SOURCE_MERGE: on unless off, 0,
@@ -136,6 +157,7 @@ func FromEnvironment() *PE {
 		data, _ := json.Marshal(summary)
 		log.Printf("perception-engine: boot bootstrap %s", data)
 	}
+	p.startMQTTFromEnvironment()
 	return p
 }
 
@@ -261,21 +283,6 @@ func (p *PE) Sensor(sensorID string, body map[string]any) (map[string]any, error
 	return map[string]any{"success": true, "sensorId": sensorID, "timestamp": nowMS()}, nil
 }
 
-// Signal is POST /api/signals. triggerPush arrives with the push cycle (#11).
-func (p *PE) Signal(body map[string]any) (map[string]any, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	s, err := p.ingestSignal(body)
-	if err != nil {
-		return nil, err
-	}
-	var source any
-	if s != nil {
-		source = s.json(nowMS())
-	}
-	return map[string]any{"success": true, "timestamp": nowMS(), "source": source}, nil
-}
-
 // BootstrapFromRE is POST /api/sources/bootstrap-from-machines: the RE's
 // machines interned as test sources.
 func (p *PE) BootstrapFromRE() map[string]any {
@@ -300,6 +307,12 @@ func (p *PE) Machines() ([]byte, error) {
 	data, err := p.getRE("/api/machines")
 	if err != nil {
 		return nil, &Error{502, err.Error()}
+	}
+	var listing map[string]any
+	if json.Unmarshal(data, &listing) == nil {
+		p.mu.Lock()
+		p.cacheCatalog(listing)
+		p.mu.Unlock()
 	}
 	return data, nil
 }

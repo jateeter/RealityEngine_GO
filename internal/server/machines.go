@@ -108,10 +108,9 @@ func jsonBody(r *http.Request) (map[string]any, error) {
 	if err := json.Unmarshal(data, &v); err != nil {
 		return nil, machine.BadRequest("invalid JSON body: %v", err)
 	}
+	// A JSON non-object reads as a nil map: no keys for a lenient route, and
+	// refusable by one that needs an object (objectBody).
 	obj, _ := v.(map[string]any)
-	if obj == nil {
-		obj = map[string]any{}
-	}
 	return obj, nil
 }
 

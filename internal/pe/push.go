@@ -148,6 +148,7 @@ func (p *PE) cacheCatalog(listing map[string]any) {
 		}
 	}
 	p.catalog = catalog
+	p.catalogLoaded, p.catalogRefreshedAt = true, nowMS()
 }
 
 // osreFoldCells maps each mergeBatch cell to its writing machine's name and
@@ -344,6 +345,8 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 	p.advance()
 	p.lastPush = step
 	globalStep := p.globalStep
+	// On the whole step, before the caller's selector narrows the reply.
+	dispatch := p.dispatchTriggers(step)
 	p.mu.Unlock()
 	reply := map[string]any{}
 	for k, v := range step {
@@ -353,7 +356,7 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 	if !includeMachineResults {
 		delete(reply, "machineResults")
 	}
-	return map[string]any{"success": true, "step": reply, "timestamp": timestamp, "globalStep": globalStep, "error": nil}
+	return map[string]any{"success": true, "step": reply, "timestamp": timestamp, "globalStep": globalStep, "error": nil, "dispatch": dispatch}
 }
 
 func (p *PE) execute(includeMachineResults bool, only any) map[string]any {

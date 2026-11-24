@@ -159,7 +159,6 @@ func TestUnsupportedAndUnknownRoutes(t *testing.T) {
 		{"RE", http.MethodPost, "/api/engine/clone/machine/m-1", http.StatusNotImplemented, "POST /api/engine/clone/machine/:machineId"},
 		{"RE", http.MethodGet, "/api/machines/cloneable", http.StatusNotImplemented, "GET /api/machines/cloneable"},
 		{"RE", http.MethodPost, "/api/runtime/snapshot", http.StatusNotImplemented, "POST /api/runtime/snapshot"},
-		{"PE", http.MethodGet, "/api/triggers/status", http.StatusNotImplemented, "GET /api/triggers/status"},
 		{"PE", http.MethodGet, "/api/arbitration", http.StatusNotFound, ""},
 		{"RE", http.MethodGet, "/api/not-specified", http.StatusNotFound, ""},
 		{"RE", http.MethodDelete, "/api/health", http.StatusNotFound, ""},
