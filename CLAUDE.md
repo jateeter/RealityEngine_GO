@@ -34,6 +34,7 @@ Owner decisions, 2026-11-22:
 - `internal/server`: the shared lifecycle (loopback listener, graceful drain on SIGINT/SIGTERM), each component's implemented handlers (today `GET /api/health` in the spec's shape `{status, timestamp, version}`), and a JSON 404 for anything the spec doesn't define.
 - `internal/surface`: the route inventory of `SURFACE_SPEC.md` (`spec-routes.json`, embedded, digest-checked, same schema and `routesSha256` as Rust's), the router (literal segments beat `:param`s, so the spec's overlapping routes resolve, which `ServeMux` refuses), and the specified 501 `unsupported` envelope for every route not yet implemented. `Implemented` lists the routes served, and `groupIssues` names the issue for every other route.
 - `cmd/refresh-surface`: regenerates `internal/surface/spec-routes.json` and `conformance/SURFACE_STATUS.md` from a committed `../RealityEngine_CI/SURFACE_SPEC.md`. `-check` reports drift and writes nothing. It is local maintenance, never a hosted step, because it reads a sibling checkout.
+- `internal/lanetls`: the runtime TLS contract (`RE_TLS_CERT`, `RE_TLS_KEY`, `RE_TLS_CA`, optional `RE_TLS_CRL`). All three or none; a partial set refuses to start. The listener is TLS 1.3 with required client certificates and the CRL; the PE's outbound client presents the instance certificate and verifies its peer.
 - `go.mod`, `.go-version`: Go 1.27.3, the one pin for every lane. There are no third-party dependencies. Adding one is a reviewed decision, not a convenience.
 
 Today the commands serve health, and answer every other specified route `unsupported` (Go#7). Implementing a route means adding its handler and its id to `surface.Implemented`, then regenerating the status. Extend this map as packages land.
@@ -56,7 +57,7 @@ What runs where:
 - **Hosted checks here:** GitGuardian only. There is no hosted regression workflow in this repository (owner, 2026-11-23).
 - **Build and regression** run from RealityEngine_CI, as Rust's do. `regression-test.sh --execute --follower rust,go` builds `bin/reality-engine` and `bin/perception-engine` with the pinned Go (`scripts/lib/go-toolchain.sh`, `GOTOOLCHAIN=local`) and checks their provenance. It then holds `go-1` against the voters in the follower lane, `scripts/follower-conformance.sh --follower go` (RealityEngine_CI#836, #837, PR #849).
 - **Corpus replay and the surface probe** (Go#9, Go#7) are tools run locally and from RealityEngine_CI's lanes, never hosted jobs.
-- On a TLS lane (`RE_TLS=on`), `go-1` is `unavailable` until Go#6. It is never run in plaintext there.
+- On a TLS lane (`RE_TLS=on`), each `go-1` listener serves TLS 1.3 + mTLS on a loopback port of its own (`internal/lanetls`), behind RealityEngine_CI's `scripts/lib/tls_front.py` on the public port, which holds the profile's suites (Go#6). It is never run in plaintext there.
 - **A green local or hosted run is not a parity claim.** It says this checkout builds and its tests pass. Report a check that could not run as unavailable, never as a pass.
 
 ## Ports
