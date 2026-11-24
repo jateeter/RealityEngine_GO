@@ -1,0 +1,80 @@
+{
+  "concurrent": {
+    "errors": 0,
+    "listMachines": {
+      "maxMs": 490.512,
+      "meanMs": 190.331,
+      "n": 200,
+      "p50Ms": 152.994,
+      "p90Ms": 320.119,
+      "p99Ms": 483.252
+    },
+    "stepNumbers": {
+      "contiguous": true,
+      "distinct": 200,
+      "duplicates": 0,
+      "first": 200,
+      "last": 399
+    },
+    "steps": {
+      "maxMs": 474.375,
+      "meanMs": 167.467,
+      "n": 200,
+      "p50Ms": 127.548,
+      "p90Ms": 314.579,
+      "p99Ms": 417.461
+    },
+    "stepsPerSecond": 22.09209121360528,
+    "workers": 8
+  },
+  "corpus": {
+    "eventDimension": 20502,
+    "listBytes": 23358454,
+    "listMs": 182.167,
+    "machines": 1552
+  },
+  "dimensionGrowth": {
+    "after": 20766,
+    "before": 20502,
+    "deleteStatus": 200,
+    "expectedAtLeast": 20766,
+    "postMs": 0.596,
+    "postStatus": 200,
+    "stepAfterGrowthMs": 22.317
+  },
+  "failureBehavior": {
+    "healthAfter": {
+      "error": "\u003cnil\u003e",
+      "status": 200
+    },
+    "malformedPerceive": {
+      "ms": 0.177,
+      "status": 400
+    },
+    "oversizeMachine33MiB": {
+      "ms": 17.737,
+      "status": 413
+    },
+    "unknownMachineProcess": {
+      "ms": 0.209,
+      "status": 404
+    }
+  },
+  "finishedAt": "2026-11-24T04:56:51Z",
+  "re": "http://127.0.0.1:57095",
+  "rssMiBAfter": 4350,
+  "rssMiBBefore": 80,
+  "serial": {
+    "errors": 0,
+    "latency": {
+      "maxMs": 39.17,
+      "meanMs": 13.81,
+      "n": 200,
+      "p50Ms": 12.725,
+      "p90Ms": 16.014,
+      "p99Ms": 36.652
+    },
+    "stepsPerSecond": 71.58957126079616
+  },
+  "startedAt": "2026-11-24T04:56:38Z"
+}
