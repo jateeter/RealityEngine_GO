@@ -67,6 +67,22 @@ var Implemented = map[string]bool{
 	"RE GET /api/runtime/vector-space":      true,
 	"RE GET /api/runtime/storage-footprint": true,
 	"RE POST /api/perception/diagnostic":    true,
+	// Configuration, vectors, the machine graph, governance and demos (#2,
+	// slice A).
+	"RE GET /":                     true,
+	"RE GET /api":                  true,
+	"RE GET /api/config":           true,
+	"RE PUT /api/config/dimension": true,
+	"RE PUT /api/config/threshold": true,
+	"RE POST /api/vectors":         true,
+	"RE POST /api/vectors/search":  true,
+	"RE GET /api/vectors/:id":      true,
+	"RE DELETE /api/vectors/:id":   true,
+	"RE GET /api/machine-graph":    true,
+	"RE GET /api/governance/route": true,
+	"RE GET /api/demo/multi-step":  true,
+	"RE GET /api/demo/data-center": true,
+	"RE GET /api/demo/kleene-star": true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that

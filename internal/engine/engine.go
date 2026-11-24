@@ -46,6 +46,10 @@ type Engine struct {
 	// steps is the perceptual space, the trajectory histories and the
 	// arbiter (step.go).
 	steps stepState
+	// threshold is PUT /api/config/threshold's value; no comparator reads it.
+	threshold float64
+	// vectors is the engine-scoped document store (/api/vectors).
+	vectors map[string]map[string]any
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -62,7 +66,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		machines: map[string]*machine.Machine{}, machinesDir: machinesDir,
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
-		steps: newStepState(machinesDir),
+		steps: newStepState(machinesDir), threshold: defaultThreshold, vectors: map[string]map[string]any{},
 	}
 	if machinesDir == "" {
 		return e, nil

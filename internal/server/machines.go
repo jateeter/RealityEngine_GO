@@ -205,6 +205,18 @@ func trajectory(eng *engine.Engine, isre bool) http.HandlerFunc {
 	}
 }
 
+// root is GET / and GET /api: what is answering.
+var root = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"name": "Reality Engine", "version": version + "-go", "status": "running"})
+})
+
+func demo(eng *engine.Engine, name, file string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		body, err := eng.Demo(name, file)
+		answer(w, body, err)
+	}
+}
+
 // machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10)
 // and its engine routes (#13).
 func machineRoutes(eng *engine.Engine) map[string]http.Handler {
@@ -366,6 +378,42 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		"RE POST /api/perception/diagnostic": withBody(func(_ *http.Request, body map[string]any) (any, error) {
 			return eng.Diagnostic(numbers(body["universalInputSpace"]))
 		}),
+		"RE GET /":    root,
+		"RE GET /api": root,
+		"RE GET /api/config": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Config())
+		}),
+		"RE PUT /api/config/dimension": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.SetDimension(queryValue(r, "dimension"))
+			answer(w, body, err)
+		}),
+		"RE PUT /api/config/threshold": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.SetThreshold(queryValue(r, "threshold"))
+			answer(w, body, err)
+		}),
+		"RE POST /api/vectors": withRaw(func(_ *http.Request, body []byte) (any, error) {
+			return eng.StoreVector(body)
+		}),
+		"RE POST /api/vectors/search": withRaw(func(_ *http.Request, body []byte) (any, error) {
+			return eng.SearchVectors(body)
+		}),
+		"RE GET /api/vectors/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Vector(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE DELETE /api/vectors/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, eng.DeleteVector(r.PathValue("id")))
+		}),
+		"RE GET /api/machine-graph": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.MachineGraph())
+		}),
+		"RE GET /api/governance/route": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.GovernanceRoute(queryValue(r, "machineId"), queryValue(r, "sequenceId"), queryValue(r, "values"))
+			answer(w, body, err)
+		}),
+		"RE GET /api/demo/multi-step":  demo(eng, "Multi-Step State Machine", "MultiStep.json"),
+		"RE GET /api/demo/data-center": demo(eng, "Data Center Monitoring", "DataCenterMonitoring.json"),
+		"RE GET /api/demo/kleene-star": demo(eng, "Kleene Star Operator", "KleeneStar.json"),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()
 			answer(w, body, err)
