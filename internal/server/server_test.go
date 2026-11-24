@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -46,8 +47,12 @@ func TestPortFromEnv(t *testing.T) {
 
 func mustHandler(t *testing.T, component string) http.Handler {
 	t.Helper()
-	// A minted, unpersisted clock: never the developer's allocated instance.
+	// A minted, unpersisted clock: never the developer's allocated instance;
+	// and a PE that does not reach for a live RE at boot.
 	t.Setenv("INSTANCE_UUID", "")
+	if _, set := os.LookupEnv("RE_URL"); !set {
+		t.Setenv("RE_URL", "http://127.0.0.1:1")
+	}
 	h, err := handler(component)
 	if err != nil {
 		t.Fatal(err)
