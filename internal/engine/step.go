@@ -486,6 +486,7 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	var firings []firing
 	for _, c := range results {
 		m := e.machines[c.id]
+		e.coverage.record(m, c.transition)
 		input, output, _ := m.Regions()
 		t := c.transition
 		var outputVector any
@@ -565,6 +566,11 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 		var gov map[string]any
 		bestRank, bestSeq := 0.0, ""
 		for _, p := range pending {
+			// Deprecated fires count once per asserted output (FOLD_PLACEMENT
+			// amendment A4).
+			if seq, ok := m.Sequences[p.sequenceID]; ok && seq.DeprecatedAt != "" {
+				e.coverage.deprecated[[4]string{c.id, m.Name, p.sequenceID, seq.ReplacedBy}]++
+			}
 			decision := resolveGovernance(m, p.sequenceID, p.values)
 			if decision == nil {
 				continue
@@ -589,6 +595,13 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 		rag := ""
 		if gov != nil {
 			rag, _ = gov["ragStatusCode"].(string)
+			text := func(key, fallback string) string {
+				if s, ok := gov[key].(string); ok && s != "" {
+					return s
+				}
+				return fallback
+			}
+			e.coverage.paging[[4]string{text("ownerTeam", "unrouted"), text("processStatus", "unknown"), text("ragStatusCode", "unknown"), c.id}]++
 		}
 		merges = append(merges, mergeOperation{
 			offset: output.Offset, length: output.Length, machineID: c.id, machineName: m.Name,

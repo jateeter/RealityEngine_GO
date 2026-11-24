@@ -70,6 +70,8 @@ func (e *Engine) ProcessAll(vector []float64) map[string]any {
 	}
 	close(work)
 	wg.Wait()
+	// No coverage is recorded here: as on C++, coverage counts the step path
+	// (perceive and simulation steps) only.
 
 	fired := []any{}
 	for _, out := range outputs {

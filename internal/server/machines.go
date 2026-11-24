@@ -453,6 +453,12 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		"RE GET /api/sampler/stats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, eng.SamplerStats())
 		}),
+		"RE GET /api/metrics": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+			if _, err := w.Write([]byte(eng.Metrics())); err != nil {
+				log.Printf("write metrics: %v", err)
+			}
+		}),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()
 			answer(w, body, err)
