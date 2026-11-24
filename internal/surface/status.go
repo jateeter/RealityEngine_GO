@@ -96,6 +96,8 @@ var Implemented = map[string]bool{
 	"RE POST /api/sampler/stop":                           true,
 	"RE POST /api/sampler/sample":                         true,
 	"RE GET /api/sampler/stats":                           true,
+	// CES coverage and the runtime gauges (#2, slice C).
+	"RE GET /api/metrics": true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that
