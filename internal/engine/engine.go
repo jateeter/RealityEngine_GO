@@ -50,6 +50,10 @@ type Engine struct {
 	threshold float64
 	// vectors is the engine-scoped document store (/api/vectors).
 	vectors map[string]map[string]any
+	// sim is the perceptual simulation; sampler the sampler's bookkeeping,
+	// which a reset keeps.
+	sim     simulation
+	sampler sampler
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -67,6 +71,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
 		steps: newStepState(machinesDir), threshold: defaultThreshold, vectors: map[string]map[string]any{},
+		sampler: newSampler(),
 	}
 	if machinesDir == "" {
 		return e, nil
