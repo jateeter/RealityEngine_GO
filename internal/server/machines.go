@@ -414,6 +414,45 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 		"RE GET /api/demo/multi-step":  demo(eng, "Multi-Step State Machine", "MultiStep.json"),
 		"RE GET /api/demo/data-center": demo(eng, "Data Center Monitoring", "DataCenterMonitoring.json"),
 		"RE GET /api/demo/kleene-star": demo(eng, "Kleene Star Operator", "KleeneStar.json"),
+		"RE POST /api/perceptual-simulation/configure/chunk": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.ConfigureChunk(body), nil
+		}),
+		"RE POST /api/perceptual-simulation/configure/commit": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body, err := eng.ConfigureCommit()
+			answer(w, body, err)
+		}),
+		"RE POST /api/perceptual-simulation/step": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body, err := eng.SimulationStep()
+			answer(w, body, err)
+		}),
+		"RE POST /api/perceptual-simulation/start": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body, err := eng.SimulationStart()
+			answer(w, body, err)
+		}),
+		"RE POST /api/perceptual-simulation/stop": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SimulationStop())
+		}),
+		"RE POST /api/perceptual-simulation/reset": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SimulationReset())
+		}),
+		"RE GET /api/perceptual-simulation/state": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SimulationState())
+		}),
+		"RE GET /api/perceptual-simulation/history": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SimulationHistory())
+		}),
+		"RE POST /api/sampler/start": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.SamplerStart(body), nil
+		}),
+		"RE POST /api/sampler/stop": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SamplerStop())
+		}),
+		"RE POST /api/sampler/sample": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.SamplerSample(body), nil
+		}),
+		"RE GET /api/sampler/stats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.SamplerStats())
+		}),
 		"RE GET /api/buses/semantic": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			body, err := eng.SemanticBusRegistry()
 			answer(w, body, err)

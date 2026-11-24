@@ -83,6 +83,19 @@ var Implemented = map[string]bool{
 	"RE GET /api/demo/multi-step":  true,
 	"RE GET /api/demo/data-center": true,
 	"RE GET /api/demo/kleene-star": true,
+	// Perceptual simulation and the sampler (#2, slice B).
+	"RE POST /api/perceptual-simulation/configure/chunk":  true,
+	"RE POST /api/perceptual-simulation/configure/commit": true,
+	"RE POST /api/perceptual-simulation/start":            true,
+	"RE POST /api/perceptual-simulation/stop":             true,
+	"RE POST /api/perceptual-simulation/step":             true,
+	"RE POST /api/perceptual-simulation/reset":            true,
+	"RE GET /api/perceptual-simulation/state":             true,
+	"RE GET /api/perceptual-simulation/history":           true,
+	"RE POST /api/sampler/start":                          true,
+	"RE POST /api/sampler/stop":                           true,
+	"RE POST /api/sampler/sample":                         true,
+	"RE GET /api/sampler/stats":                           true,
 }
 
 // groupIssues assigns every route group to the RealityEngine_GO issue that
