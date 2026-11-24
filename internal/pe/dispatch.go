@@ -42,6 +42,7 @@ type dispatchState struct {
 	droppedCold      int
 	errors           int
 	bases            map[string]string // machine name -> ABox base IRI; nil until read
+	tally            tally             // the semantic guardrail counters /api/metrics reports
 }
 
 func truthy(v string) bool {
@@ -56,6 +57,7 @@ func newDispatch(localAIBase string) dispatchState {
 	d := dispatchState{
 		enabled: truthy(os.Getenv("TRIGGERS_ENABLED")), mode: "dry-run",
 		graphqlEndpoint: localAIBase + "/graphql", capacity: 256, records: map[string]map[string]any{},
+		tally: newTally(),
 	}
 	if m := os.Getenv("TRIGGER_DISPATCH_MODE"); m != "" {
 		d.mode = m
@@ -139,11 +141,17 @@ func stringsOf(v any) []any {
 	return out
 }
 
-func (d *dispatchState) semantics(machineName string, gov map[string]any, sequenceIDs []any) map[string]any {
+// manifest is the corpus ABox manifest, read once.
+func (d *dispatchState) manifest() map[string]string {
 	if d.bases == nil {
 		d.bases = manifestBases()
 	}
-	base := d.bases[machineName]
+	return d.bases
+}
+
+func (d *dispatchState) semantics(machineName string, gov map[string]any, sequenceIDs []any) map[string]any {
+	base := d.manifest()[machineName]
+	d.tally.dispatchRecord(base != "", str(gov["actionCode"], ""), str(gov["ragStatusCode"], ""))
 	sequence := str(gov["sequenceId"], "")
 	if sequence == "" && len(sequenceIDs) == 1 {
 		sequence, _ = sequenceIDs[0].(string)
