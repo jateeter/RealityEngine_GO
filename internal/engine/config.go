@@ -22,7 +22,7 @@ import (
 //
 // Only controls this engine acts on are carried: "a control that reports a
 // value it does not act on is worse than an absent one". clone.maxActive
-// arrives with the clone routes (#5).
+// bounds live clones per template (clones.go, #5).
 
 // arbitrationWindowMax bounds arbitrationWindow.
 const arbitrationWindowMax = 1024
@@ -45,6 +45,7 @@ func (e *Engine) controls() []map[string]any {
 	return []map[string]any{
 		control("arbitrationRetention", "engine", c.arbitrationRetention, d.arbitrationRetention),
 		control("arbitrationWindow", "engine", c.arbitrationWindow, d.arbitrationWindow),
+		control("clone.maxActive", "engine", e.clones.maxActive, cloneMaxActiveFirst),
 		control("historyLimit", "engine", c.historyLimit, d.historyLimit),
 		control("includeActiveRegions", "engine", c.includeActiveRegions, d.includeActiveRegions),
 		control("includeMachineResults", "engine", c.includeMachineResults, d.includeMachineResults),
@@ -124,6 +125,14 @@ func (e *Engine) SetControl(name string, body map[string]any) (map[string]any, e
 		}
 		c.arbitrationWindow = w // narrowing evicts at once
 		e.pruneArbitration()
+	case "clone.maxActive":
+		// Lowering it below the live count refuses new clones of that
+		// template until the count falls; it never recycles one.
+		bound, ok := wholeIn(value, cloneBlocks)
+		if !ok {
+			return nil, machine.BadRequest("clone.maxActive requires a whole-number `value` in [0, %d]", cloneBlocks)
+		}
+		e.clones.maxActive = bound
 	case "historyLimit":
 		limit, ok := wholeIn(value, -1)
 		if !ok {
@@ -177,6 +186,8 @@ func (e *Engine) ResetControl(name string) (map[string]any, error) {
 	case "arbitrationWindow":
 		c.arbitrationWindow = d.arbitrationWindow
 		e.pruneArbitration()
+	case "clone.maxActive":
+		e.clones.maxActive = cloneMaxActiveFirst
 	case "historyLimit":
 		c.historyLimit = d.historyLimit
 		e.steps.trimHistory()

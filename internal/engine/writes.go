@@ -132,6 +132,9 @@ func (e *Engine) Add(body []byte) (map[string]any, error) {
 func (e *Engine) Delete(id string) (map[string]any, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := e.refuseClone(id); err != nil {
+		return nil, err
+	}
 	if _, ok := e.machines[id]; !ok {
 		return nil, machine.NotFound("machine %s not found", id)
 	}
@@ -149,6 +152,9 @@ func (e *Engine) Replace(id string, body []byte) (map[string]any, error) {
 	m.LoadedAtMS = clock.NowMS()
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := e.refuseClone(id); err != nil {
+		return nil, err
+	}
 	return e.readmit(id, m), nil
 }
 
@@ -160,6 +166,9 @@ func (e *Engine) Patch(id string, body map[string]any) (map[string]any, error) {
 	resident, ok := e.machines[id]
 	if !ok {
 		return nil, machine.NotFound("Machine not found")
+	}
+	if err := e.refuseClone(id); err != nil {
+		return nil, err
 	}
 	declaration := resident.Declaration()
 	for _, key := range []string{"name", "description"} {
