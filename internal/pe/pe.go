@@ -14,6 +14,7 @@
 package pe
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -126,8 +127,10 @@ func flagOn(v string, set bool) bool {
 
 // FromEnvironment is the PE VECTOR_DIMENSION (default 7680) and RE_URL
 // (default http://localhost:5851, the Go RE's reserved port) describe,
-// bootstrapped from its RE unless PE_SOURCE_BOOTSTRAP is off.
-func FromEnvironment() *PE {
+// bootstrapped from its RE unless PE_SOURCE_BOOTSTRAP is off. clientTLS, when
+// the lane is on (RE_TLS_*), is every outbound HTTPS call's configuration: the
+// instance certificate, the lane CA and its CRL.
+func FromEnvironment(clientTLS *tls.Config) *PE {
 	dimension := 7680
 	if v, err := strconv.Atoi(os.Getenv("VECTOR_DIMENSION")); err == nil && v >= 0 {
 		dimension = v
@@ -137,6 +140,11 @@ func FromEnvironment() *PE {
 		reURL = "http://localhost:5851"
 	}
 	p := New(dimension, reURL)
+	if clientTLS != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = clientTLS
+		p.client.Transport = transport
+	}
 	machinesDir := os.Getenv("MACHINES_DIR")
 	if machinesDir == "" {
 		machinesDir = "../RealityEngine_Machines/machines"
