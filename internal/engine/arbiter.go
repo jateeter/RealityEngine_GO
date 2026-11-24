@@ -311,3 +311,21 @@ func recordsJSON(records []arbitrationRecord, canonical bool) []any {
 	}
 	return out
 }
+
+// Registry is a read-only view of the arbitration registry, for the PE's OSRE
+// fold (ARBITER_CONTRACT §4.4b), which applies a cell's declared rule.
+type Registry struct{ reg arbitrationRegistry }
+
+// LoadRegistry reads the registry as the RE does.
+func LoadRegistry(machinesDir string) Registry { return Registry{loadArbitrationRegistry(machinesDir)} }
+
+// Entry is a cell's declared rule and provider ranks; ok is false when the
+// registry does not name the cell.
+func (r Registry) Entry(cell int) (rule string, ranks map[string]float64, ok bool) {
+	e, ok := r.reg.entries[cell]
+	return e.rule, e.providerRanks, ok
+}
+
+// DeterminismRank is a provider's default rank: deterministic 3, measured 2,
+// generated 1.
+func DeterminismRank(provider string) float64 { return determinismRank(provider) }

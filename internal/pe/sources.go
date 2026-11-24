@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/instance"
 )
 
@@ -504,10 +505,61 @@ func (p *PE) sourceValues(s *Source, now int64) []float64 {
 func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 
 // assemble is the vector the active sources compose now, over the persistent
-// vector, each cell clamped to [0, 1].
-func (p *PE) assemble() []float64 {
+// vector, each cell clamped to [0, 1], with the OSRE fold applied.
+func (p *PE) assemble() []float64 { return p.assembleRecording(nil) }
+
+// provider is the source's provider for arbitration: its origin's head,
+// sensor or synthetic without one, openclaw read as acp and ollama or
+// localaistack as localai.
+func (s *Source) provider() string {
+	origin := ""
+	if s.sensor != nil {
+		origin = strings.ToLower(s.sensor.origin)
+	}
+	head, _, _ := strings.Cut(origin, ".")
+	switch head {
+	case "", "signal":
+		if s.sensor != nil {
+			return "sensor"
+		}
+		return "synthetic"
+	case "openclaw":
+		return "acp"
+	case "ollama", "localaistack":
+		return "localai"
+	}
+	return head
+}
+
+// foldUnitInterval is a machine's outputMergeTransformation over [0, 1].
+func foldUnitInterval(transformation string, s, o float64) float64 {
+	switch transformation {
+	case "and", "meet", "discrete-median":
+		return math.Min(s, o)
+	case "strong-disjunction":
+		return math.Min(s+o, 1)
+	case "strong-conjunction":
+		return math.Max(s+o-1, 0)
+	case "xor":
+		return math.Max(math.Min(s, 1-o), math.Min(1-s, o))
+	case "nor":
+		return 1 - math.Max(s, o)
+	case "nand":
+		return 1 - math.Min(s, o)
+	}
+	return math.Max(s, o)
+}
+
+// assembleRecording composes the sources, then folds every source-written
+// cell the last push's mergeBatch also wrote with the OSRE value
+// (ARBITER_CONTRACT §4.4b, RealityEngine_CI#525): by the cell's declared rule
+// when the registry ranks the source's provider, else by the writing
+// machine's outputMergeTransformation. Each fold is recorded when folds is
+// given.
+func (p *PE) assembleRecording(folds *[]any) []float64 {
 	now := nowMS()
 	out := append([]float64(nil), p.persistent...)
+	writer := make([]*Source, len(out))
 	for _, s := range p.compositionOrder() {
 		values := p.sourceValues(s, now)
 		for i := 0; i < int(max(s.Region.Length, 0)) && i < len(values); i++ {
@@ -516,9 +568,156 @@ func (p *PE) assemble() []float64 {
 				continue
 			}
 			out[cell] = clamp01(values[i])
+			writer[cell] = s
 		}
 	}
+	cells := make([]int64, 0, len(p.osreFold))
+	for c := range p.osreFold {
+		cells = append(cells, c)
+	}
+	sort.Slice(cells, func(i, j int) bool { return cells[i] < cells[j] })
+	for _, cell := range cells {
+		if cell < 0 || cell >= int64(len(writer)) || writer[cell] == nil {
+			continue
+		}
+		machineName, transformation := p.osreFold[cell][0], p.osreFold[cell][1]
+		src, c := writer[cell], int(cell)
+		sv, ov := out[c], p.persistent[c]
+		provider := src.provider()
+		rule, ranks, declared := p.registry.Entry(c)
+		_, named := ranks[provider]
+		named = declared && named
+		byRule, osreWins := false, false
+		if named && rule == "PRECEDENCE" {
+			rank := func(pr string) float64 {
+				if r, ok := ranks[pr]; ok {
+					return r
+				}
+				return engine.DeterminismRank(pr)
+			}
+			osreRank, sourceRank := rank("machine"), rank(provider)
+			byRule, osreWins = osreRank != sourceRank, osreRank > sourceRank
+		}
+		resolved := foldUnitInterval(transformation, sv, ov)
+		if byRule {
+			resolved = sv
+			if osreWins {
+				resolved = ov
+			}
+		}
+		out[c] = clamp01(resolved)
+		if folds == nil {
+			continue
+		}
+		record := map[string]any{
+			"cell":     cell,
+			"osre":     map[string]any{"machine": machineName, "provider": "machine", "value": ov},
+			"source":   map[string]any{"id": src.ID, "name": src.Name, "kind": src.kind(), "provider": provider, "value": sv},
+			"resolved": resolved,
+		}
+		if byRule {
+			record["resolution"], record["rule"] = "declared-rule", rule
+			record["kept"] = "source"
+			if osreWins {
+				record["kept"] = "osre"
+			}
+		} else {
+			record["resolution"], record["operator"] = "osre-fold", transformation
+			if declared {
+				record["declaredRule"] = rule
+				if !named {
+					record["review"] = "provider-unranked"
+				}
+			}
+			switch {
+			case resolved == ov && resolved == sv:
+				record["kept"] = "both"
+			case resolved == ov:
+				record["kept"] = "osre"
+			case resolved == sv:
+				record["kept"] = "source"
+			default:
+				record["kept"] = "combined"
+			}
+		}
+		*folds = append(*folds, record)
+	}
 	return out
+}
+
+// recordContention records, at a push only, the contended cells, the folds
+// and each source's counters (contended, and lost).
+func (p *PE) recordContention() {
+	cells := p.sourceContention()
+	folds := []any{}
+	p.assembleRecording(&folds)
+	contended, lost := map[string]bool{}, map[string]bool{}
+	for _, f := range folds {
+		fm := f.(map[string]any)
+		id := fm["source"].(map[string]any)["id"].(string)
+		if fm["kept"] == "osre" {
+			lost[id] = true
+		}
+		contended[id] = true
+	}
+	for _, cv := range cells {
+		cm := cv.(map[string]any)
+		contended[cm["winner"].(map[string]any)["id"].(string)] = true
+		for _, l := range cm["suppressed"].([]any) {
+			id := l.(map[string]any)["id"].(string)
+			contended[id], lost[id] = true, true
+		}
+	}
+	for id := range contended {
+		c := p.contention.counters[id]
+		c[0]++
+		if lost[id] {
+			c[1]++
+		}
+		p.contention.counters[id] = c
+	}
+	p.contention.transition, p.contention.cells, p.contention.folds = p.globalStep, cells, folds
+}
+
+// advance moves every active source on a step: a test source to its next
+// event (a non-looping one deactivates at its end), a random walk by a step.
+func (p *PE) advance() {
+	p.globalStep++
+	ids := make([]string, 0, len(p.sources))
+	for id := range p.sources {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		s := p.sources[id]
+		if !s.Active {
+			continue
+		}
+		switch {
+		case s.test != nil:
+			next := p.testStep[id] + 1
+			if next >= len(s.test.inputs) {
+				p.testStep[id] = 0
+				if !s.test.loop {
+					s.Active = false
+				}
+			} else {
+				p.testStep[id] = next
+			}
+		case s.simulated != nil && s.simulated.pattern == "random-walk":
+			walk := p.walk[id]
+			for i := range walk {
+				walk[i] = clamp01(walk[i] + (p.uniform()*2-1)*0.05)
+			}
+		}
+	}
+}
+
+// adoptSpace makes the RE's returned space the persistent vector.
+func (p *PE) adoptSpace(values []float64) {
+	p.ensureCapacity(int64(len(values)))
+	p.persistent = make([]float64, p.dimension)
+	copy(p.persistent, values)
 }
 
 // sourceContention is every cell more than one active source writes, the
@@ -588,6 +787,7 @@ func (p *PE) resetSources() {
 		s.ActivatedAt = 0
 	}
 	p.contention = newContention()
+	p.osreFold = map[int64][2]string{}
 }
 
 func (p *PE) contentionJSON() map[string]any {
