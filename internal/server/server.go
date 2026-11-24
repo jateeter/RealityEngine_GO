@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -83,6 +84,10 @@ func handler(component string) (http.Handler, error) {
 		}
 	})
 	handlers := map[string]http.Handler{}
+	// contractRoutes are routes another contract defines and SURFACE_SPEC.md
+	// does not list, keyed "METHOD /path": the PE's GET /api/metrics
+	// (docs/PE_METRICS_CONTRACT.md). They are served ahead of the router.
+	contractRoutes := map[string]http.Handler{}
 	switch component {
 	case surface.RE:
 		handlers["RE GET /api/health"] = health
@@ -95,9 +100,16 @@ func handler(component string) (http.Handler, error) {
 		}
 	case surface.PE:
 		handlers["PE GET /api/health"] = health
-		for id, h := range peRoutes(pe.FromEnvironment()) {
+		perception := pe.FromEnvironment()
+		for id, h := range peRoutes(perception) {
 			handlers[id] = h
 		}
+		contractRoutes["GET /api/metrics"] = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			if _, err := io.WriteString(w, perception.Metrics()); err != nil {
+				log.Printf("write metrics response: %v", err)
+			}
+		})
 	}
 	router, err := surface.NewRouter(inv, layers, surface.Implemented, handlers)
 	if err != nil {
@@ -112,7 +124,16 @@ func handler(component string) (http.Handler, error) {
 			log.Printf("write not-found response: %v", err)
 		}
 	})
-	return router, nil
+	if len(contractRoutes) == 0 {
+		return router, nil
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h, ok := contractRoutes[r.Method+" "+r.URL.Path]; ok {
+			h.ServeHTTP(w, r)
+			return
+		}
+		router.ServeHTTP(w, r)
+	}), nil
 }
 
 func serve(ctx context.Context, listener net.Listener, h http.Handler) error {

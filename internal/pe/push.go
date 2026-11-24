@@ -344,6 +344,7 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 	}
 	p.advance()
 	p.lastPush = step
+	p.recordPerceptionEvents()
 	globalStep := p.globalStep
 	// On the whole step, before the caller's selector narrows the reply.
 	dispatch := p.dispatchTriggers(step)
