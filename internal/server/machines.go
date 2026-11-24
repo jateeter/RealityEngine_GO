@@ -8,11 +8,13 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
 	"github.com/jateeter/RealityEngine_GO/internal/pe"
+	"github.com/jateeter/RealityEngine_GO/internal/stream"
 )
 
 // writeJSON answers with a JSON body as the voters write it: no HTML escaping
@@ -35,6 +37,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func machineNotFound(w http.ResponseWriter) {
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Machine not found"})
+}
+
+// encodeJSON is v as writeJSON writes it.
+func encodeJSON(v any) string {
+	var buf bytes.Buffer
+	e := json.NewEncoder(&buf)
+	e.SetEscapeHTML(false)
+	if e.Encode(v) != nil {
+		return ""
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
 }
 
 // writeError answers a route's error: its status and {"error": message}; an
@@ -226,7 +239,11 @@ func demo(eng *engine.Engine, name, file string) http.HandlerFunc {
 // machineRoutes are the RE's Machines and Sequences routes (RealityEngine_GO#10)
 // and its engine routes (#13).
 func machineRoutes(eng *engine.Engine) map[string]http.Handler {
+	steps := stream.NewHub() // /api/engine/stream: each pushed step, bare
 	return map[string]http.Handler{
+		"RE SSE /api/engine/stream": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			stream.ServeSSE(w, r, steps)
+		}),
 		"RE POST /api/machines": withRaw(func(_ *http.Request, body []byte) (any, error) {
 			return eng.Add(body)
 		}),
@@ -324,7 +341,13 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			writeJSON(w, http.StatusOK, eng.Clock())
 		}),
 		"RE POST /api/perceive": withBody(func(_ *http.Request, body map[string]any) (any, error) {
-			return eng.Perceive(body)
+			out, err := eng.Perceive(body)
+			// The step exactly as this call answers it, no wrapper (owner
+			// ruling 2026-11-01); built only when someone is listening.
+			if err == nil && steps.Listened() {
+				steps.Publish(encodeJSON(out))
+			}
+			return out, err
 		}),
 		"RE POST /api/perception/observe": withBody(func(_ *http.Request, body map[string]any) (any, error) {
 			return map[string]any{

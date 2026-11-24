@@ -24,6 +24,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jateeter/RealityEngine_GO/internal/engine"
+	"github.com/jateeter/RealityEngine_GO/internal/stream"
 )
 
 // Error is a refused request: its status and message.
@@ -65,6 +68,13 @@ type PE struct {
 	autoRunning    bool
 	autoIntervalMS int
 	client         *http.Client
+	// osreFold is the last push's mergeBatch cells: writing machine name and
+	// its outputMergeTransformation.
+	osreFold map[int64][2]string
+	registry engine.Registry
+	catalog  map[string]map[string]any
+	hub      *stream.Hub
+	pushes   *pushes
 }
 
 func nowMS() int64 { return time.Now().UnixMilli() }
@@ -76,6 +86,7 @@ func New(dimension int, reURL string) *PE {
 		reURL: strings.TrimSuffix(reURL, "/"), sources: map[string]*Source{}, testStep: map[string]int{},
 		contention: newContention(), mergeOnly: true, rng: uint64(nowMS()) | 1, walk: map[string][]float64{},
 		autoIntervalMS: autoIntervalMS, client: &http.Client{Timeout: 120 * time.Second},
+		osreFold: map[int64][2]string{}, catalog: map[string]map[string]any{}, hub: stream.NewHub(), pushes: newPushes(),
 	}
 }
 
@@ -105,10 +116,20 @@ func FromEnvironment() *PE {
 		reURL = "http://localhost:5851"
 	}
 	p := New(dimension, reURL)
+	machinesDir := os.Getenv("MACHINES_DIR")
+	if machinesDir == "" {
+		machinesDir = "../RealityEngine_Machines/machines"
+	}
+	// The fold applies a cell's declared rule, so the PE loads the registry
+	// the RE loads.
+	p.registry = engine.LoadRegistry(machinesDir)
 	if v, ok := os.LookupEnv("PE_SOURCE_MERGE"); ok {
 		p.mergeOnly = flagOn(v, true)
 	}
 	log.Printf("perception-engine: perceptionDimension %d, RE %s", dimension, p.reURL)
+	// The catalog is a cache of the RE's machines; reading it changes no
+	// source membership, so it is read whatever PE_SOURCE_BOOTSTRAP says.
+	p.refreshCatalog()
 	v, set := os.LookupEnv("PE_SOURCE_BOOTSTRAP")
 	if flagOn(v, set) {
 		summary := p.BootstrapFromRE()
@@ -267,8 +288,11 @@ func (p *PE) BootstrapFromRE() map[string]any {
 		return bootstrapFailed(err)
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.bootstrap(listing)
+	p.cacheCatalog(listing)
+	summary := p.bootstrap(listing)
+	p.mu.Unlock()
+	p.BroadcastState()
+	return summary
 }
 
 // Machines is GET /api/machines: the RE's listing, passed through as it came.
