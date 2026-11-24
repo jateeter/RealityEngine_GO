@@ -168,7 +168,7 @@ func (m *Machine) View(full bool) map[string]any {
 			views[i] = map[string]any{"id": s.ID, "name": s.Name, "initialEventIds": s.InitialEventIDs()}
 		}
 	}
-	return map[string]any{
+	out := map[string]any{
 		"id":                        m.ID,
 		"name":                      m.Name,
 		"description":               m.Description,
@@ -184,6 +184,11 @@ func (m *Machine) View(full bool) map[string]any {
 		"metadata":          m.metadata(),
 		"perceptualMapping": m.mapping(),
 	}
+	// Only clones carry these three.
+	if m.CloneOf != "" {
+		out["cloneOf"], out["assetId"], out["envelopeId"] = m.CloneOf, m.AssetID, m.EnvelopeID
+	}
+	return out
 }
 
 // CorpusDocument is the full form as the corpus declares a machine:

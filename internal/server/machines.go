@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -495,6 +496,23 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			body, err := eng.SemanticBus(r.PathValue("id"))
 			answer(w, body, err)
 		}),
+		"RE GET /api/machines/cloneable": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Cloneable())
+		}),
+		"RE POST /api/engine/clone/machine/:machineId": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			asset, _ := rawQueryValue(r.URL.RawQuery, "asset")
+			envelope, _ := rawQueryValue(r.URL.RawQuery, "envelope")
+			code, body := eng.CloneMachine(r.PathValue("machineId"), asset, envelope)
+			writeJSON(w, code, body)
+		}),
+		"RE POST /api/engine/recycle/machine/:cloneId": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			generation, present := rawQueryValue(r.URL.RawQuery, "generation")
+			code, body := eng.RecycleClone(r.PathValue("cloneId"), generation, present)
+			writeJSON(w, code, body)
+		}),
+		"RE GET /api/engine/clones": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.Clones())
+		}),
 		"RE GET /api/machines": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, eng.List())
 		}),
@@ -521,4 +539,20 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			writeJSON(w, http.StatusOK, body)
 		}),
 	}
+}
+
+// rawQueryValue is the raw query's value for key, percent-decoded as C++
+// url_decode decodes it ("+" stays "+"); present is false when key is absent.
+func rawQueryValue(raw, key string) (value string, present bool) {
+	for _, pair := range strings.Split(raw, "&") {
+		k, v, _ := strings.Cut(pair, "=")
+		if k != key {
+			continue
+		}
+		if decoded, err := url.PathUnescape(v); err == nil {
+			return decoded, true
+		}
+		return v, true
+	}
+	return "", false
 }

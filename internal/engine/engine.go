@@ -56,6 +56,8 @@ type Engine struct {
 	sampler sampler
 	// coverage is the CES coverage /api/metrics exposes; a reset keeps it.
 	coverage coverage
+	// clones is the clone space and clone.maxActive (clones.go).
+	clones cloneSpace
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -73,7 +75,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		dimension: dimension, checkpoints: map[string]map[string]checkpoint{},
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
 		steps: newStepState(machinesDir), threshold: defaultThreshold, vectors: map[string]map[string]any{},
-		sampler: newSampler(), coverage: newCoverage(),
+		sampler: newSampler(), coverage: newCoverage(), clones: newCloneSpace(),
 	}
 	if machinesDir == "" {
 		return e, nil
