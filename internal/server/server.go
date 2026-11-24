@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
+	"github.com/jateeter/RealityEngine_GO/internal/pe"
 	"github.com/jateeter/RealityEngine_GO/internal/surface"
 )
 
@@ -94,6 +95,9 @@ func handler(component string) (http.Handler, error) {
 		}
 	case surface.PE:
 		handlers["PE GET /api/health"] = health
+		for id, h := range peRoutes(pe.FromEnvironment()) {
+			handlers[id] = h
+		}
 	}
 	router, err := surface.NewRouter(inv, layers, surface.Implemented, handlers)
 	if err != nil {

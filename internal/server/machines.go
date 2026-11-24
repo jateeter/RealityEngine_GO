@@ -12,6 +12,7 @@ import (
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
+	"github.com/jateeter/RealityEngine_GO/internal/pe"
 )
 
 // writeJSON answers with a JSON body as the voters write it: no HTML escaping
@@ -47,6 +48,11 @@ func writeError(w http.ResponseWriter, err error) {
 	var me *machine.Error
 	if errors.As(err, &me) {
 		writeJSON(w, me.Status, map[string]string{"error": me.Message})
+		return
+	}
+	var pErr *pe.Error
+	if errors.As(err, &pErr) {
+		writeJSON(w, pErr.Status, map[string]string{"error": pErr.Message})
 		return
 	}
 	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

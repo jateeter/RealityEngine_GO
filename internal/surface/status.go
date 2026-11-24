@@ -10,12 +10,27 @@ import (
 // Listing a route here establishes presence, not behavioral parity: agreement
 // with the voters is RealityEngine_CI's follower lane (#12).
 var Implemented = map[string]bool{
-	"RE GET /api/health":              true,
-	"PE GET /api/health":              true,
-	"RE GET /api/machines":            true,
-	"RE GET /api/machines/:id":        true,
-	"RE GET /api/machines/:id/export": true,
-	"RE GET /api/machines/json/list":  true,
+	"RE GET /api/health": true,
+	"PE GET /api/health": true,
+	// PE info, state, config, reset, sources, sensors, signals and the
+	// machines proxy (#8).
+	"PE GET /":                                     true,
+	"PE GET /api/state":                            true,
+	"PE PATCH /api/config":                         true,
+	"PE POST /api/reset":                           true,
+	"PE GET /api/sources":                          true,
+	"PE POST /api/sources":                         true,
+	"PE PATCH /api/sources/:id":                    true,
+	"PE DELETE /api/sources/:id":                   true,
+	"PE POST /api/sources/bootstrap-from-machines": true,
+	"PE GET /api/sources/contention":               true,
+	"PE POST /api/sensors/:sensorId":               true,
+	"PE POST /api/signals":                         true,
+	"PE GET /api/machines":                         true,
+	"RE GET /api/machines":                         true,
+	"RE GET /api/machines/:id":                     true,
+	"RE GET /api/machines/:id/export":              true,
+	"RE GET /api/machines/json/list":               true,
 	// Machine writes, transitions and checkpoints (#10).
 	"RE POST /api/machines":                                      true,
 	"RE PUT /api/machines/:id":                                   true,
