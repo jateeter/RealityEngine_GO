@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
+	"github.com/jateeter/RealityEngine_GO/internal/lanetls"
 	"github.com/jateeter/RealityEngine_GO/internal/pe"
 	"github.com/jateeter/RealityEngine_GO/internal/surface"
 )
@@ -29,6 +31,18 @@ func Run(ctx context.Context, component, portVariable string) error {
 	if err != nil {
 		return err
 	}
+	// The lane's TLS material is read first: a partial or unreadable set
+	// refuses to start, and never falls back to plaintext.
+	material, err := lanetls.FromEnvironment()
+	if err != nil {
+		return err
+	}
+	var serverTLS *tls.Config
+	if material != nil {
+		if serverTLS, err = material.Server(); err != nil {
+			return err
+		}
+	}
 	h, err := handler(component)
 	if err != nil {
 		return err
@@ -39,7 +53,11 @@ func Run(ctx context.Context, component, portVariable string) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", address, err)
 	}
-	log.Printf("bootstrap service listening on http://%s", listener.Addr())
+	scheme := "http"
+	if serverTLS != nil {
+		listener, scheme = tls.NewListener(listener, serverTLS), "https"
+	}
+	log.Printf("bootstrap service listening on %s://%s", scheme, listener.Addr())
 	return serve(ctx, listener, h)
 }
 
@@ -100,7 +118,17 @@ func handler(component string) (http.Handler, error) {
 		}
 	case surface.PE:
 		handlers["PE GET /api/health"] = health
-		perception := pe.FromEnvironment()
+		material, err := lanetls.FromEnvironment()
+		if err != nil {
+			return nil, err
+		}
+		var clientTLS *tls.Config
+		if material != nil {
+			if clientTLS, err = material.Client(); err != nil {
+				return nil, err
+			}
+		}
+		perception := pe.FromEnvironment(clientTLS)
 		for id, h := range peRoutes(perception) {
 			handlers[id] = h
 		}

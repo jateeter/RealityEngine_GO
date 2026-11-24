@@ -34,10 +34,13 @@ Ports must be decimal integers from 1 through 65535. Missing, invalid, or
 already-bound ports are errors. Stop either process with Ctrl-C or SIGTERM;
 it stops accepting connections and drains in-flight requests before exiting.
 
-Both services bind only to `127.0.0.1` and currently serve plaintext HTTP for
-local development. **Do not use these bootstrap servers in a suite deployment.**
-Suite TLS 1.3, mutual authentication, and PKI integration are tracked in
-[issue #6](https://github.com/jateeter/RealityEngine_GO/issues/6).
+Both services bind only to `127.0.0.1`. Without `RE_TLS_*` they serve plaintext
+HTTP for local development. With `RE_TLS_CERT`, `RE_TLS_KEY` and `RE_TLS_CA`
+(and optionally `RE_TLS_CRL`) they serve TLS 1.3 with required client
+certificates, and a partial set refuses to start. Go cannot restrict TLS 1.3
+cipher suites, so on the suite's lanes each listener sits behind
+RealityEngine_CI's OpenSSL front, which serves the transport profile
+([issue #6](https://github.com/jateeter/RealityEngine_GO/issues/6)).
 Specified but unimplemented routes currently return 404; the required
 contract-derived 501 `unsupported` responses are tracked in
 [issue #7](https://github.com/jateeter/RealityEngine_GO/issues/7).
