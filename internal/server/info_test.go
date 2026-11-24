@@ -22,9 +22,13 @@ func TestConfigDimensionAndThreshold(t *testing.T) {
 	if !strings.Contains(out["error"].(string), "the 32 this engine already holds") {
 		t.Fatalf("the refusal names which bound applied: %v", out)
 	}
-	for q, want := range map[string]int{"?threshold=0.7": 200, "": 200, "?threshold=high": 400, "?threshold=0.7abc": 400, "?threshold=nan": 400} {
-		if code, out := send(t, h, "PUT", "/api/config/threshold"+q, ""); code != want || (want == 200 && out["threshold"] != 0.7) {
-			t.Fatalf("%s: %d %v", q, code, out)
+	// In order: the write first, then requests that must leave it as it is.
+	for _, c := range []struct {
+		q    string
+		want int
+	}{{"?threshold=0.7", 200}, {"", 200}, {"?threshold=high", 400}, {"?threshold=0.7abc", 400}, {"?threshold=nan", 400}} {
+		if code, out := send(t, h, "PUT", "/api/config/threshold"+c.q, ""); code != c.want || (c.want == 200 && out["threshold"] != 0.7) {
+			t.Fatalf("%s: %d %v", c.q, code, out)
 		}
 	}
 	if _, c := send(t, h, "GET", "/api/config", ""); c["eventDimension"] != 32.0 || c["matchThreshold"] != 0.7 {
