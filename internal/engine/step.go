@@ -91,7 +91,7 @@ func (t trajectoryEntry) json() map[string]any {
 }
 
 type retainedStep struct {
-	lamport uint64
+	at      [2]uint64 // (lamport, commit) at the step's commit
 	records []arbitrationRecord
 }
 
@@ -155,9 +155,9 @@ func (s *stepState) commit(isre, osre trajectoryEntry) {
 	s.osre = append(s.osre, osre)
 }
 
-func (s *stepState) retainArbitration(step int, lamport uint64, records []arbitrationRecord) {
+func (s *stepState) retainArbitration(step int, at [2]uint64, records []arbitrationRecord) {
 	if s.controls.arbitrationRetention && s.controls.arbitrationWindow > 0 {
-		s.retained[step] = retainedStep{lamport, records}
+		s.retained[step] = retainedStep{at, records}
 		first := step - s.controls.arbitrationWindow + 1
 		for n := range s.retained {
 			if n < first {
@@ -429,7 +429,11 @@ func (e *Engine) Perceive(body map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.JSON(includeResults, includeSpace, includeRegions, only), nil
+	out := s.JSON(includeResults, includeSpace, includeRegions, only)
+	// The committed step's clock, so a PE can key what it records by the RE's
+	// (instance, commit) (SURFACE_SPEC "Identity, clock and parity", #600).
+	out["clock"] = e.clockJSON(e.lastCommit, n)
+	return out, nil
 }
 
 type composed struct {
@@ -726,14 +730,16 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 		mergeBatch: merges, eventBus: writes, space: append([]float64{}, space...),
 	}
 
-	// The commit: the clock ticks for the step and the pair is appended; the
-	// arbitration records are retained before the completion is published.
-	lamport, err := e.instance.Tick()
+	// The commit: commit and lamport tick together for the step and the pair
+	// is appended; the arbitration records are retained before the completion
+	// is published (#600).
+	lamport, commit, err := e.instance.CommitStep()
 	if err != nil {
 		return nil, &machine.Error{Status: 500, Message: err.Error()}
 	}
+	e.lastCommit = [2]uint64{lamport, commit}
 	e.steps.commit(isre, osre)
-	e.steps.retainArbitration(n, lamport, records)
+	e.steps.retainArbitration(n, e.lastCommit, records)
 	e.steps.lastArbitration = records
 	e.completedStep = n
 	timer.boundary(3)
@@ -1055,7 +1061,7 @@ func (e *Engine) arbitrationBody(records []arbitrationRecord, canonical bool) ma
 
 func (e *Engine) retainedStepJSON(n int, r retainedStep) map[string]any {
 	body := e.arbitrationBody(r.records, true)
-	body["clock"] = map[string]any{"instance": e.instance.Instance(), "lamport": r.lamport, "step": n}
+	body["clock"] = e.clockJSON(r.at, n)
 	return body
 }
 

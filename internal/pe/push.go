@@ -343,6 +343,10 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 		p.adoptSpace(aggregate(numbers(space), results))
 	}
 	p.advance()
+	// A completed push is the PE's commit (#600).
+	if lamport, commit, err := p.clock.CommitStep(); err == nil {
+		p.lastPushClock = [2]uint64{lamport, commit}
+	}
 	p.lastPush = step
 	p.recordPerceptionEvents()
 	globalStep := p.globalStep

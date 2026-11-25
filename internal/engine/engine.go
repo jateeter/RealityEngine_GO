@@ -34,8 +34,12 @@ type Engine struct {
 	checkpoints map[string]map[string]checkpoint
 	// sequences is the engine's own sequence store (/api/sequences).
 	sequences map[string]storedSequence
-	// instance is the instance UUID and Lamport clock.
+	// instance is the instance's participant clock (#296, #600), shared with
+	// the request middleware, which ticks it on every receive and send.
 	instance *instance.Clock
+	// lastCommit is (lamport, commit) at the newest committed step: what
+	// GET /api/engine/clock and a step's reply report.
+	lastCommit [2]uint64
 	// history is the /api/engine/process audit trail, newest first.
 	history []any
 	// mappingVersion is bumped on every machine admitted or removed.
@@ -104,7 +108,7 @@ func FromEnvironment() (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("reality-engine: instance %s, lamport %d", c.Instance(), c.Lamport())
+	log.Printf("reality-engine: instance %s, lamport %d, commit %d", c.Instance(), c.Lamport(), c.Commit())
 	dimension := DefaultDimension
 	if v, err := strconv.Atoi(os.Getenv("VECTOR_DIMENSION")); err == nil && v >= 0 {
 		dimension = v
@@ -115,7 +119,21 @@ func FromEnvironment() (*Engine, error) {
 		return nil, err
 	}
 	e.instance = c
+	e.lastCommit = [2]uint64{c.Lamport(), c.Commit()}
 	return e, nil
+}
+
+// InstanceClock is the engine's participant clock, for the request middleware.
+func (e *Engine) InstanceClock() *instance.Clock {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.instance
+}
+
+// clockJSON is a committed step's clock: {instance, lamport, commit, step}.
+// The caller holds mu.
+func (e *Engine) clockJSON(at [2]uint64, step int) map[string]any {
+	return map[string]any{"instance": e.instance.Instance(), "lamport": at[0], "commit": at[1], "step": step}
 }
 
 // List is GET /api/machines: every resident machine, mapped or not, in

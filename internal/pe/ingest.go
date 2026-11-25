@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/jateeter/RealityEngine_GO/internal/instance"
 )
 
 // The ingest routes (RealityEngine_GO#3, slice B): POST
@@ -153,7 +155,20 @@ func (p *PE) Completion(body map[string]any) (int, map[string]any) {
 		return status, reply
 	}
 	completionID, _ := firstString(body, "completionId", "id")
+	// The completion's clock and causedBy (#600): the dispatch's clock while
+	// its record is in the ledger, else the sender's well-formed echo, else nil.
+	var own any
+	if id, ok := body["dispatchId"].(string); ok && id != "" {
+		p.mu.RLock()
+		if r, found := p.dispatch.records[id]; found {
+			own = r["clock"]
+		}
+		p.mu.RUnlock()
+	}
+	causedBy := instance.CausedBy(own, body["causedBy"])
+	completionClock := p.clock.Event()
 	completion := map[string]any{
+		"clock": completionClock, "causedBy": causedBy,
 		"provider": provider, "agent": agent, "sensorId": sensorID, "sourceMappingId": mappingID,
 		"correlationId": correlation, "envelopeId": envelope, "completionId": completionID, "receivedAt": nowMS(),
 	}
@@ -163,6 +178,7 @@ func (p *PE) Completion(body map[string]any) (int, map[string]any) {
 	p.broadcast(map[string]any{
 		"type": "agent.completion.received", "provider": provider, "agent": agent, "sensorId": sensorID,
 		"sourceMappingId": mappingID, "correlationId": correlation, "envelopeId": envelope, "timestamp": nowMS(),
+		"clock": completionClock, "causedBy": causedBy,
 	})
 	return http.StatusOK, map[string]any{"success": true, "completion": completion, "signal": reply}
 }

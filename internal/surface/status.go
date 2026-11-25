@@ -12,6 +12,8 @@ import (
 var Implemented = map[string]bool{
 	"RE GET /api/health": true,
 	"PE GET /api/health": true,
+	// The PE's participant clock (RealityEngine_CI#600).
+	"PE GET /api/clock": true,
 	// PE info, state, config, reset, sources, sensors, signals and the
 	// machines proxy (#8).
 	"PE GET /":                                     true,

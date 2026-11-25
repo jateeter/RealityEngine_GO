@@ -328,6 +328,9 @@ func (p *PE) dispatchTriggers(step map[string]any) map[string]any {
 				"createdAt": now, "updatedAt": now, "providerReceipt": nil,
 				"envelope": p.envelope(op, machine, envelopeID, correlationID), "error": nil,
 				"semantics": p.dispatch.semantics(str(machine["name"], ""), gov, sequenceIDs), "replayOf": nil,
+				// The PE's clock when it stored the record (#600); a completion
+				// names it as causedBy.
+				"clock": p.clock.Event(),
 			}
 			p.dispatch.envelopesCreated++
 			created++
@@ -465,6 +468,7 @@ func (p *PE) Replay(id string, freshIDs bool) (map[string]any, error) {
 	now := nowMS()
 	r["id"], r["status"], r["mode"], r["attempts"] = mint("dispatch"), "recorded", "replay", 0
 	r["providerReceipt"], r["error"], r["replayOf"], r["createdAt"], r["updatedAt"] = nil, nil, id, now, now
+	r["clock"] = p.clock.Event() // a replay is a new stored message (#600)
 	if freshIDs {
 		envelopeID, correlationID := mint("trigger-envelope"), mint("trigger-correlation")
 		r["envelopeId"], r["correlationId"] = envelopeID, correlationID

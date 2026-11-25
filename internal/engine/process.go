@@ -24,6 +24,7 @@ func (e *Engine) SetClock(c *instance.Clock) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.instance = c
+	e.lastCommit = [2]uint64{c.Lamport(), c.Commit()}
 }
 
 // ProcessAll is POST /api/engine/process: every resident machine, in parallel,
@@ -185,11 +186,14 @@ func (e *Engine) Active() map[string]any {
 	return map[string]any{"activeEvents": active}
 }
 
-// Clock is GET /api/engine/clock: the clock for the newest committed step.
-// Only the step path commits a step, so until it does lamport is the value
-// the instance resumed from and step is -1.
+// Clock is GET /api/engine/clock: {instance, lamport, commit, step} for the
+// newest committed step, and headers, the inbound RE-Clock headers since boot.
+// Only the step path commits a step, so until it does lamport and commit are
+// the values the instance resumed from and step is -1.
 func (e *Engine) Clock() map[string]any {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return map[string]any{"instance": e.instance.Instance(), "lamport": e.instance.Lamport(), "step": e.completedStep}
+	out := e.clockJSON(e.lastCommit, e.completedStep)
+	out["headers"] = e.instance.Headers()
+	return out
 }

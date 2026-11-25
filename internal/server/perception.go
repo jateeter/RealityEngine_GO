@@ -56,6 +56,10 @@ func peRoutes(p *pe.PE) map[string]http.Handler {
 		"PE GET /": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"service": "Perception Engine (Go)", "status": "running"})
 		}),
+		// The PE's participant clock (RealityEngine_CI#600).
+		"PE GET /api/clock": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, p.ClockJSON())
+		}),
 		"PE GET /api/state": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, p.State())
 		}),
