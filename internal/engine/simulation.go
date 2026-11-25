@@ -182,7 +182,9 @@ func (e *Engine) SimulationStep() (map[string]any, error) {
 	if s == nil {
 		return map[string]any{"done": true, "success": true}, nil
 	}
-	return map[string]any{"success": true, "step": s.JSON(true, true, true, nil)}, nil
+	out := s.JSON(true, true, true, nil)
+	out["clock"] = e.clockJSON(e.lastCommit, s.number) // as on POST /api/perceive (#600)
+	return map[string]any{"success": true, "step": out}, nil
 }
 
 // SimulationReset is POST /api/perceptual-simulation/reset.

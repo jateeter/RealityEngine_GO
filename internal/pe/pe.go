@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
+	"github.com/jateeter/RealityEngine_GO/internal/instance"
 	"github.com/jateeter/RealityEngine_GO/internal/stream"
 )
 
@@ -69,6 +70,12 @@ type PE struct {
 	autoRunning    bool
 	autoIntervalMS int
 	client         *http.Client
+	// clock is the PE's participant clock (RealityEngine_CI#600): its own UUID
+	// (PE_INSTANCE_UUID), lock and marks. Every request a receive, every
+	// response and call to an internal peer a send; a completed push its commit.
+	clock *instance.Clock
+	// lastPushClock is (lamport, commit) at the newest completed push.
+	lastPushClock [2]uint64
 	// osreFold is the last push's mergeBatch cells: writing machine name and
 	// its outputMergeTransformation.
 	osreFold map[int64][2]string
@@ -95,14 +102,30 @@ func New(dimension int, reURL string) *PE {
 		dimension: dimension, persistent: make([]float64, dimension), matchAlgorithm: "gte",
 		reURL: strings.TrimSuffix(reURL, "/"), sources: map[string]*Source{}, testStep: map[string]int{},
 		contention: newContention(), mergeOnly: true, rng: uint64(nowMS()) | 1, walk: map[string][]float64{},
-		autoIntervalMS: autoIntervalMS, client: &http.Client{Timeout: 120 * time.Second},
+		autoIntervalMS: autoIntervalMS, client: &http.Client{Timeout: 120 * time.Second}, clock: instance.Minted(),
 		osreFold: map[int64][2]string{}, catalog: map[string]map[string]any{}, hub: stream.NewHub(), pushes: newPushes(),
 	}
 	p.integrations = integrationsFromEnvironment()
 	p.localAI = &localAILedger{}
 	p.localAIBase = strings.TrimSuffix(p.integrations.localAIBaseURL, "/")
 	p.dispatch = newDispatch(p.localAIBase)
+	p.client.Transport = &instance.Transport{Clock: p.clock}
 	return p
+}
+
+// Clock is the PE's participant clock, for the request middleware.
+func (p *PE) Clock() *instance.Clock { return p.clock }
+
+// ClockJSON is GET /api/clock: {instance, lamport, commit, step} at the newest
+// completed push (commit counting completed pushes, step the globalStep), and
+// headers, the inbound RE-Clock headers since boot.
+func (p *PE) ClockJSON() map[string]any {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return map[string]any{
+		"instance": p.clock.Instance(), "lamport": p.lastPushClock[0], "commit": p.lastPushClock[1],
+		"step": p.globalStep, "headers": p.clock.Headers(),
+	}
 }
 
 func envOr(key, def string) string {
@@ -130,7 +153,13 @@ func flagOn(v string, set bool) bool {
 // bootstrapped from its RE unless PE_SOURCE_BOOTSTRAP is off. clientTLS, when
 // the lane is on (RE_TLS_*), is every outbound HTTPS call's configuration: the
 // instance certificate, the lane CA and its CRL.
-func FromEnvironment(clientTLS *tls.Config) *PE {
+func FromEnvironment(clientTLS *tls.Config) (*PE, error) {
+	// The PE's own clock, booted before it calls anyone (#600).
+	clock, err := instance.BootVar("PE_INSTANCE_UUID")
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("perception-engine: participant %s, lamport %d, commit %d", clock.Instance(), clock.Lamport(), clock.Commit())
 	dimension := 7680
 	if v, err := strconv.Atoi(os.Getenv("VECTOR_DIMENSION")); err == nil && v >= 0 {
 		dimension = v
@@ -140,11 +169,15 @@ func FromEnvironment(clientTLS *tls.Config) *PE {
 		reURL = "http://localhost:5851"
 	}
 	p := New(dimension, reURL)
+	p.clock = clock
+	p.lastPushClock = [2]uint64{clock.Lamport(), clock.Commit()}
+	clocked := &instance.Transport{Clock: clock}
 	if clientTLS != nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.TLSClientConfig = clientTLS
-		p.client.Transport = transport
+		clocked.Base = transport
 	}
+	p.client.Transport = clocked
 	machinesDir := os.Getenv("MACHINES_DIR")
 	if machinesDir == "" {
 		machinesDir = "../RealityEngine_Machines/machines"
@@ -166,7 +199,7 @@ func FromEnvironment(clientTLS *tls.Config) *PE {
 		log.Printf("perception-engine: boot bootstrap %s", data)
 	}
 	p.startMQTTFromEnvironment()
-	return p
+	return p, nil
 }
 
 // getRE reads a route of this PE's RE.

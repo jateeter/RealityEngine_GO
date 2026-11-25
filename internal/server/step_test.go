@@ -55,7 +55,9 @@ func TestPerceiveCommitsAPairAndArbitratesAContendedCell(t *testing.T) {
 	if entries := isre["history"].([]any); len(entries) != 1 || entries[0].(map[string]any)["length"] != 40.0 {
 		t.Fatalf("%v", isre)
 	}
-	if _, c := send(t, h, "GET", "/api/engine/clock", ""); c["step"] != 0.0 || c["lamport"] != 1.0 {
+	// commit ticks once per committed step; lamport also ticks on every receive
+	// and send, so it is at least commit (#600).
+	if _, c := send(t, h, "GET", "/api/engine/clock", ""); c["step"] != 0.0 || c["commit"] != 1.0 || c["lamport"].(float64) < 1 {
 		t.Fatalf("the clock ticks once per committed step: %v", c)
 	}
 
@@ -103,8 +105,9 @@ func TestStepPairWaitsAndRefuses(t *testing.T) {
 	if code, _ := send(t, h, "GET", "/api/engine/steps/0/pair?timeoutMs=0", ""); code != 408 {
 		t.Fatalf("after reset: %d", code)
 	}
-	if _, c := send(t, h, "GET", "/api/engine/clock", ""); c["step"] != -1.0 || c["lamport"] != 1.0 {
-		t.Fatalf("a reset keeps lamport: %v", c)
+	// lamport and commit are the step's, kept across the reset (#600).
+	if _, c := send(t, h, "GET", "/api/engine/clock", ""); c["step"] != -1.0 || c["commit"] != 1.0 || c["lamport"].(float64) < 1 {
+		t.Fatalf("a reset keeps lamport and commit: %v", c)
 	}
 	for _, body := range []string{`{}`, `{"vector": ["x"]}`, `{"sparseVector": [{"index": -1, "value": 1}]}`} {
 		if code, out := send(t, h, "POST", "/api/perceive", body); code != 400 || !strings.Contains(out["error"].(string), "") {

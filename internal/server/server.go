@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jateeter/RealityEngine_GO/internal/engine"
+	"github.com/jateeter/RealityEngine_GO/internal/instance"
 	"github.com/jateeter/RealityEngine_GO/internal/lanetls"
 	"github.com/jateeter/RealityEngine_GO/internal/pe"
 	"github.com/jateeter/RealityEngine_GO/internal/surface"
@@ -106,6 +107,9 @@ func handler(component string) (http.Handler, error) {
 	// does not list, keyed "METHOD /path": the PE's GET /api/metrics
 	// (docs/PE_METRICS_CONTRACT.md). They are served ahead of the router.
 	contractRoutes := map[string]http.Handler{}
+	// The participant clock this process ticks on every receive and send
+	// (RealityEngine_CI#600): the RE's instance clock, or the PE's own.
+	var clock *instance.Clock
 	switch component {
 	case surface.RE:
 		handlers["RE GET /api/health"] = health
@@ -113,6 +117,7 @@ func handler(component string) (http.Handler, error) {
 		if err != nil {
 			return nil, err
 		}
+		clock = eng.InstanceClock()
 		for id, h := range machineRoutes(eng) {
 			handlers[id] = h
 		}
@@ -128,7 +133,11 @@ func handler(component string) (http.Handler, error) {
 				return nil, err
 			}
 		}
-		perception := pe.FromEnvironment(clientTLS)
+		perception, err := pe.FromEnvironment(clientTLS)
+		if err != nil {
+			return nil, err
+		}
+		clock = perception.Clock()
 		for id, h := range peRoutes(perception) {
 			handlers[id] = h
 		}
@@ -153,15 +162,15 @@ func handler(component string) (http.Handler, error) {
 		}
 	})
 	if len(contractRoutes) == 0 {
-		return router, nil
+		return instance.Middleware(clock, router), nil
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return instance.Middleware(clock, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h, ok := contractRoutes[r.Method+" "+r.URL.Path]; ok {
 			h.ServeHTTP(w, r)
 			return
 		}
 		router.ServeHTTP(w, r)
-	}), nil
+	})), nil
 }
 
 func serve(ctx context.Context, listener net.Listener, h http.Handler) error {
