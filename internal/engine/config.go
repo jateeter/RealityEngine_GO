@@ -50,6 +50,7 @@ func (e *Engine) controls() []map[string]any {
 		control("includeActiveRegions", "engine", c.includeActiveRegions, d.includeActiveRegions),
 		control("includeMachineResults", "engine", c.includeMachineResults, d.includeMachineResults),
 		control("includePerceptualSpace", "engine", c.includePerceptualSpace, d.includePerceptualSpace),
+		control("machineJsonSummary", "engine", e.machineJSONSummary, false),
 		control("phaseDetail", "engine", c.phaseDetail, d.phaseDetail),
 		control("transitionsInhibited", "machine", inhibited, false),
 	}
@@ -146,6 +147,8 @@ func (e *Engine) SetControl(name string, body map[string]any) (map[string]any, e
 		c.includeMachineResults, err = boolean()
 	case "includePerceptualSpace":
 		c.includePerceptualSpace, err = boolean()
+	case "machineJsonSummary":
+		e.machineJSONSummary, err = boolean()
 	case "phaseDetail":
 		c.phaseDetail, err = boolean()
 	case "transitionsInhibited":
@@ -197,6 +200,8 @@ func (e *Engine) ResetControl(name string) (map[string]any, error) {
 		c.includeMachineResults = d.includeMachineResults
 	case "includePerceptualSpace":
 		c.includePerceptualSpace = d.includePerceptualSpace
+	case "machineJsonSummary":
+		e.machineJSONSummary = false
 	case "phaseDetail":
 		c.phaseDetail = d.phaseDetail
 	case "transitionsInhibited":

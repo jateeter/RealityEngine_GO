@@ -62,6 +62,9 @@ type Engine struct {
 	coverage coverage
 	// clones is the clone space and clone.maxActive (clones.go).
 	clones cloneSpace
+	// machineJSONSummary makes GET /api/machines/json/:name serve the list
+	// form instead of the full form (RealityEngine_CI#886).
+	machineJSONSummary bool
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
