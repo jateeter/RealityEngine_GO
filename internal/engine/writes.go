@@ -257,7 +257,10 @@ func (e *Engine) LoadByName(name string) (map[string]any, error) {
 	delete(e.machines, m.ID)
 	e.ingest(m)
 	m.SourceFile = base
-	return map[string]any{"success": true, "machine": m.Summary(), "message": "Machine loaded successfully"}, nil
+	// The full form, as GET /api/machines/:id serves it; with machineJsonSummary
+	// on, the list form, as GET /api/machines lists it (RealityEngine_CI#886).
+	// It served the load summary, which has no sequences.
+	return map[string]any{"success": true, "machine": m.View(!e.machineJSONSummary), "message": "Machine loaded successfully"}, nil
 }
 
 // Process is POST /api/machines/:id/process: the transition result, without
