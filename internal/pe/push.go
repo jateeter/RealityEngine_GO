@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -323,6 +324,14 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 	vector := p.assemble()
 	p.recordContention()
 	match := p.matchAlgorithm
+	// The step's ISRE composition, taken from the assembly just resolved
+	// (RealityEngine_CI#603); recorded once the RE answers with its clock.
+	var isreCells []winner
+	var isreFolds []any
+	if p.isre.capture {
+		isreCells = p.composition()
+		isreFolds = append([]any{}, p.contention.folds...)
+	}
 	p.mu.Unlock()
 	p.refreshCatalog()
 	data, err := p.postRE("/api/perceive", map[string]any{
@@ -346,6 +355,16 @@ func (p *PE) transition(includeMachineResults bool, only any) map[string]any {
 	// A completed push is the PE's commit (#600).
 	if lamport, commit, err := p.clock.CommitStep(); err == nil {
 		p.lastPushClock = [2]uint64{lamport, commit}
+	}
+	// Recording is a stored message, a tick of its own (#603).
+	if p.isre.capture {
+		if lamport, err := p.clock.Send(); err == nil {
+			re, _ := step["clock"].(map[string]any)
+			if err := p.isre.record(re, map[string]any{"instance": p.clock.Instance(), "lamport": lamport}, isreCells, isreFolds); err != nil {
+				log.Printf("perception-engine: ISRE composition capture stopped: %v", err)
+				p.isre.capture = false
+			}
+		}
 	}
 	p.lastPush = step
 	p.recordPerceptionEvents()

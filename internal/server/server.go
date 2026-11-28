@@ -148,6 +148,56 @@ func handler(component string) (http.Handler, error) {
 			return nil, err
 		}
 		clock = perception.Clock()
+		// The ISRE composition store's budget warnings, when there are any.
+		handlers["PE GET /api/health"] = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body := map[string]any{"status": "healthy", "timestamp": time.Now().UnixMilli(), "version": version}
+			if warnings := perception.IsreWarnings(); len(warnings) > 0 {
+				body["warnings"] = warnings
+			}
+			writeJSON(w, http.StatusOK, body)
+		})
+		// The PE half of K-lines (#603): SURFACE_SPEC "Routes (PE)" specifies
+		// them in prose, outside the route table, so they are contract routes.
+		contractRoutes["GET /api/isre-composition"] = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			whole := func(key string) (int64, bool) {
+				v := r.URL.Query().Get(key)
+				if v == "" {
+					return -1, true
+				}
+				n, err := strconv.ParseUint(v, 10, 63)
+				return int64(n), err == nil
+			}
+			from, okFrom := whole("from")
+			to, okTo := whole("to")
+			limit, okLimit := whole("limit")
+			if !okFrom || !okTo || !okLimit {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from, to and limit are non-negative integers"})
+				return
+			}
+			writeJSON(w, http.StatusOK, perception.IsreComposition(uint64(max(from, 0)), to, int(max(limit, 0))))
+		})
+		contractRoutes["GET /api/isre-composition/stats"] = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, perception.IsreStats())
+		})
+		contractRoutes["POST /api/isre-composition/export"] = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := jsonBody(r)
+			var from uint64
+			to := int64(-1)
+			if f, ok := body["from"].(float64); ok && f > 0 {
+				from = uint64(f)
+			}
+			if f, ok := body["to"].(float64); ok && f >= 0 {
+				to = int64(f)
+			}
+			bundle, err := perception.IsreExport(from, to)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(bundle))
+		})
 		for id, h := range peRoutes(perception) {
 			handlers[id] = h
 		}

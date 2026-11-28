@@ -92,6 +92,9 @@ type PE struct {
 	localAI            *localAILedger
 	mqttMu             sync.Mutex
 	mqtt               *mqttBridge
+	// isre is the PE half of K-lines (RealityEngine_CI#603): one ISRE
+	// composition record per completed push, in this PE's store.
+	isre *isreRecorder
 }
 
 func nowMS() int64 { return time.Now().UnixMilli() }
@@ -110,6 +113,8 @@ func New(dimension int, reURL string) *PE {
 	p.localAIBase = strings.TrimSuffix(p.integrations.localAIBaseURL, "/")
 	p.dispatch = newDispatch(p.localAIBase)
 	p.client.Transport = &instance.Transport{Clock: p.clock}
+	memory, _ := engine.OpenRecordStore("", "isreStoreMaxBytes")
+	p.isre = newIsreRecorder("", memory, nil)
 	return p
 }
 
@@ -170,6 +175,10 @@ func FromEnvironment(clientTLS *tls.Config) (*PE, error) {
 	}
 	p := New(dimension, reURL)
 	p.clock = clock
+	// The PE half of K-lines (#603): the store opens whatever capture says.
+	if p.isre, err = isreRecorderFromEnvironment(clock.Instance(), instance.Dir()); err != nil {
+		return nil, err
+	}
 	p.lastPushClock = [2]uint64{clock.Lamport(), clock.Commit()}
 	clocked := &instance.Transport{Clock: clock}
 	if clientTLS != nil {
@@ -235,13 +244,39 @@ func (p *PE) State() map[string]any {
 func (p *PE) Configure(body map[string]any) (map[string]any, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// The ISRE composition controls (RealityEngine_CI#603): validated before
+	// anything changes, so a refused request changes nothing.
+	capture, hasCapture := body["isreCapture"]
+	maxBytes, hasMax := body["isreStoreMaxBytes"]
+	if hasCapture && capture != nil {
+		if _, ok := capture.(bool); !ok {
+			return nil, &Error{400, "isreCapture requires a boolean"}
+		}
+	}
+	if hasMax && maxBytes != nil {
+		f, ok := maxBytes.(float64)
+		if !ok || f < 0 || f > isreStoreMaxMax || f != float64(int64(f)) {
+			return nil, &Error{400, fmt.Sprintf("isreStoreMaxBytes requires a whole number in [0, %d]", int64(isreStoreMaxMax))}
+		}
+	}
+	if on, _ := capture.(bool); on && p.isre.taxonomy == nil {
+		return nil, &Error{409, fmt.Sprintf("isreCapture requires re-source-kinds/%d in the corpus", taxonomyVersion)}
+	}
 	if name, ok := body["matchAlgorithm"].(string); ok {
 		if name != "gte" && name != "equals" {
 			return nil, &Error{500, "Unknown match algorithm: " + name}
 		}
 		p.matchAlgorithm = name
 	}
-	return map[string]any{"success": true, "matchAlgorithm": p.matchAlgorithm}, nil
+	if on, ok := capture.(bool); ok {
+		p.isre.capture = on
+	}
+	if f, ok := maxBytes.(float64); ok {
+		p.isre.storeMaxBytes = uint64(f)
+		p.isre.refreshBudget()
+	}
+	return map[string]any{"success": true, "matchAlgorithm": p.matchAlgorithm,
+		"isreCapture": p.isre.capture, "isreStoreMaxBytes": p.isre.storeMaxBytes}, nil
 }
 
 // Reset is POST /api/reset: this PE's run state only.

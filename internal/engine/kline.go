@@ -473,6 +473,9 @@ type klineStore struct {
 	warnMu       sync.Mutex
 	warnings     []string
 	lastControls klineControls
+	// budgetName is the control named in the budget warning: the PE's ISRE
+	// composition store shares this format (isreStoreMaxBytes).
+	budgetName string
 }
 
 func writeDurable(path string, data []byte) error {
@@ -793,7 +796,11 @@ func (s *klineStore) computeWarnings(c klineControls) []string {
 		}
 	}
 	if sealed > c.storeMaxBytes && unexported > 0 {
-		return []string{fmt.Sprintf("klineStoreMaxBytes reached: %d unexported sealed segment(s) are kept; export them to free space", unexported)}
+		name := s.budgetName
+		if name == "" {
+			name = "klineStoreMaxBytes"
+		}
+		return []string{fmt.Sprintf("%s reached: %d unexported sealed segment(s) are kept; export them to free space", name, unexported)}
 	}
 	return nil
 }
