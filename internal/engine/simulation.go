@@ -131,6 +131,12 @@ func (e *Engine) ConfigureCommit() (map[string]any, error) {
 // state to its start; a simulation run stops at its start. The caller holds
 // the write lock.
 func (e *Engine) resetSpace() {
+	// Every open K-line closes interrupted ("reset").
+	if e.klines.controls.capture {
+		if err := e.klines.onReset(); err != nil {
+			e.klineFailed(err)
+		}
+	}
 	for _, m := range e.machines {
 		m.Reset()
 	}

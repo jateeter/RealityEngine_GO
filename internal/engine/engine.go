@@ -65,6 +65,11 @@ type Engine struct {
 	// machineJSONSummary makes GET /api/machines/json/:name serve the list
 	// form instead of the full form (RealityEngine_CI#886).
 	machineJSONSummary bool
+	// K-lines (RealityEngine_CI#603, #17): the tracker and the instance's store,
+	// and the resident corpus's fingerprint with the mappingVersion it was computed at.
+	klines             *klineTracker
+	corpusFingerprint  string
+	fingerprintVersion int
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -83,7 +88,10 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
 		steps: newStepState(machinesDir), threshold: defaultThreshold, vectors: map[string]map[string]any{},
 		sampler: newSampler(), coverage: newCoverage(), clones: newCloneSpace(),
+		fingerprintVersion: -1,
 	}
+	memory, _ := openKlineStore("")
+	e.klines = newKlineTracker(e.instance, memory)
 	if machinesDir == "" {
 		return e, nil
 	}
@@ -123,6 +131,12 @@ func FromEnvironment() (*Engine, error) {
 	}
 	e.instance = c
 	e.lastCommit = [2]uint64{c.Lamport(), c.Commit()}
+	// K-lines (#603, #17): the store opens whatever capture says, so the routes
+	// always answer from it.
+	if e.klines, err = klineTrackerFor(c); err != nil {
+		c.Close()
+		return nil, err
+	}
 	return e, nil
 }
 

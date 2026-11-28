@@ -371,6 +371,68 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			body, err := eng.StepPair(n, timeout)
 			answer(w, body, err)
 		}),
+		"RE GET /api/klines": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			q := func(key string) *string {
+				if v := r.URL.Query().Get(key); v != "" {
+					return &v
+				}
+				return nil
+			}
+			whole := func(key string, def uint64) (uint64, bool) {
+				v := q(key)
+				if v == nil {
+					return def, true
+				}
+				n, err := strconv.ParseUint(*v, 10, 64)
+				return n, err == nil
+			}
+			since, okSince := whole("since", 0)
+			limit, okLimit := whole("limit", 100)
+			if !okSince || !okLimit {
+				writeError(w, machine.BadRequest("since and limit are non-negative integers"))
+				return
+			}
+			writeJSON(w, http.StatusOK, eng.Klines(q("outcome"), q("machine"), q("sequence"), since, int(min(limit, 1<<31))))
+		}),
+		"RE GET /api/klines/open": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.KlinesOpen())
+		}),
+		"RE GET /api/klines/stats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, eng.KlinesStats())
+		}),
+		"RE GET /api/klines/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Kline(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE POST /api/klines/export": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := jsonBody(r)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			set := func(key string) map[string]bool {
+				out := map[string]bool{}
+				list, _ := body[key].([]any)
+				for _, v := range list {
+					if s, ok := v.(string); ok {
+						out[s] = true
+					}
+				}
+				return out
+			}
+			var since uint64
+			if f, ok := body["since"].(float64); ok && f > 0 {
+				since = uint64(f)
+			}
+			bundle, err := eng.ExportKlines(set("outcome"), since, set("machines"))
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(bundle))
+		}),
 		"RE GET /api/arbitration": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := eng.Arbitration(queryValue(r, "step"))
 			answer(w, body, err)

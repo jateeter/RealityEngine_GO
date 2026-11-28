@@ -118,6 +118,16 @@ func handler(component string) (http.Handler, error) {
 			return nil, err
 		}
 		clock = eng.InstanceClock()
+		// The K-line store's budget warnings, when there are any: an unexported
+		// population is kept, never dropped, and the store still writes, so
+		// status stays (SURFACE_SPEC "The K-line store").
+		handlers["RE GET /api/health"] = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body := map[string]any{"status": "healthy", "timestamp": time.Now().UnixMilli(), "version": version}
+			if warnings := eng.KlineWarnings(); len(warnings) > 0 {
+				body["warnings"] = warnings
+			}
+			writeJSON(w, http.StatusOK, body)
+		})
 		for id, h := range machineRoutes(eng) {
 			handlers[id] = h
 		}

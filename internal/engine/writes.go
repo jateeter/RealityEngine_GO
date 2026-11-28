@@ -138,6 +138,7 @@ func (e *Engine) Delete(id string) (map[string]any, error) {
 	if _, ok := e.machines[id]; !ok {
 		return nil, machine.NotFound("machine %s not found", id)
 	}
+	e.machineRemoved(id)
 	delete(e.machines, id)
 	e.mappingVersion++
 	return map[string]any{"success": true, "id": id}, nil

@@ -13,7 +13,7 @@ func TestEngineConfigIsOneStateWithRuntimeOptions(t *testing.T) {
 		names = append(names, c.(map[string]any)["name"].(string))
 	}
 	want := []string{"arbitrationRetention", "arbitrationWindow", "clone.maxActive", "historyLimit", "includeActiveRegions",
-		"includeMachineResults", "includePerceptualSpace", "machineJsonSummary", "phaseDetail", "transitionsInhibited"}
+		"includeMachineResults", "includePerceptualSpace", "klineCapture", "klineFeedbackHops", "klineStoreMaxBytes", "machineJsonSummary", "phaseDetail", "transitionsInhibited"}
 	if len(names) != len(want) {
 		t.Fatalf("%v", names)
 	}
