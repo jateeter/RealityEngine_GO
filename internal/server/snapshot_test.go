@@ -70,3 +70,53 @@ func TestSnapshotRoundTripsThroughAReset(t *testing.T) {
 		t.Fatalf("%d %v", code, body)
 	}
 }
+
+// A restore is capturable (RealityEngine_CI#904): a capture right after it is
+// the restored snapshot, its clocks still naming the instance that committed
+// the steps, here another instance's; another span is 410 until the next step,
+// which carries this instance's own clock.
+func TestRestoreThenCaptureIsAnIdentity(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "TwoStep.json"), []byte(twoStep), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MACHINES_DIR", dir)
+	t.Setenv("SEMANTICS_MANIFEST", filepath.Join(dir, "no-manifest.json"))
+	h := mustHandler(t, "RE")
+	send(t, h, "POST", "/api/perceive", `{"vector": [1]}`)
+	send(t, h, "POST", "/api/perceive", `{"vector": [0]}`)
+	_, taken := send(t, h, "POST", "/api/runtime/snapshot", `{"from": 0, "to": 1}`)
+	_, snap := send(t, h, "GET", "/api/runtime/snapshot/"+taken["id"].(string), "")
+	own := snap["kline"].(map[string]any)["clocks"].(map[string]any)["to"].(map[string]any)["instance"]
+	const source = "01a2aaaa-0000-7000-8000-0000000f4001"
+	for _, end := range []string{"from", "to"} {
+		snap["kline"].(map[string]any)["clocks"].(map[string]any)[end].(map[string]any)["instance"] = source
+	}
+	send(t, h, "POST", "/api/engine/reset", `{}`)
+	if code, _ := send(t, h, "POST", "/api/runtime/restore", encodeJSON(map[string]any{"snapshot": snap})); code != 200 {
+		t.Fatalf("restore: %d", code)
+	}
+	code, again := send(t, h, "POST", "/api/runtime/snapshot", `{}`)
+	if code != 200 || again["id"] != taken["id"] {
+		t.Fatalf("a capture right after a restore: %d %v", code, again)
+	}
+	_, body := send(t, h, "GET", "/api/runtime/snapshot/"+again["id"].(string), "")
+	if encodeJSON(body) != encodeJSON(snap) {
+		t.Fatalf("not byte for byte:\n%s\n%s", encodeJSON(body), encodeJSON(snap))
+	}
+	if code, _ := send(t, h, "POST", "/api/runtime/snapshot", `{"from": 1, "to": 1}`); code != 410 {
+		t.Fatalf("another span: %d", code)
+	}
+	if code, _ := send(t, h, "POST", "/api/runtime/snapshot", `{"scope": ["two-step"]}`); code != 410 {
+		t.Fatalf("another scope: %d", code)
+	}
+	send(t, h, "POST", "/api/perceive", `{"vector": [0]}`)
+	_, next := send(t, h, "POST", "/api/runtime/snapshot", `{}`)
+	_, nb := send(t, h, "GET", "/api/runtime/snapshot/"+next["id"].(string), "")
+	if got := nb["kline"].(map[string]any)["clocks"].(map[string]any)["to"].(map[string]any)["instance"]; got != own {
+		t.Fatalf("the next step's instance: %v, want %v", got, own)
+	}
+	if encodeJSON(nb["kline"].(map[string]any)["activeBefore"]) != encodeJSON(snap["kline"].(map[string]any)["activeAfter"]) {
+		t.Fatalf("the next step does not start from the restored state")
+	}
+}

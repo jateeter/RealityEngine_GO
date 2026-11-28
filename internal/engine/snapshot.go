@@ -22,8 +22,11 @@ import (
 	"github.com/jateeter/RealityEngine_GO/internal/machine"
 )
 
+// retainedSnapshotStep is one retained step. Its clock is the instance that
+// committed it and its lamport (RealityEngine_CI#904).
 type retainedSnapshotStep struct {
 	step       int
+	instance   string
 	lamport    uint64
 	isre, osre trajectoryEntry
 	ops        []klineOp
@@ -35,6 +38,16 @@ type retention struct {
 	base    []activeEntry
 	baseSet bool // a restore sets it; otherwise the base is taken at the first step
 	steps   []retainedSnapshotStep
+	// restored is what a restore re-established, until the next step (#904):
+	// a capture returns it, so restore then capture is an identity. Its clocks
+	// keep the instance that committed those steps, which on a sandbox
+	// replica is the source, never the replica.
+	restored *restorePoint
+}
+
+type restorePoint struct {
+	kline       map[string]any
+	arbitration any
 }
 
 func allActives(machines map[string]*machine.Machine) []activeEntry {
@@ -57,11 +70,12 @@ func sortedMachineIDs(machines map[string]*machine.Machine) []string {
 // onReset: the base is taken at the first step after it, every machine at its
 // initial events.
 func (r *retention) onReset() {
-	r.base, r.baseSet, r.steps = nil, false, nil
+	r.base, r.baseSet, r.steps, r.restored = nil, false, nil, nil
 }
 
-func (r *retention) onStep(step int, lamport uint64, isre, osre trajectoryEntry, ops []klineOp,
+func (r *retention) onStep(step int, instance string, lamport uint64, isre, osre trajectoryEntry, ops []klineOp,
 	machines map[string]*machine.Machine, limit int) {
+	r.restored = nil
 	if len(r.steps) == 0 && !r.baseSet {
 		r.base = nil
 		for _, id := range sortedMachineIDs(machines) {
@@ -69,7 +83,7 @@ func (r *retention) onStep(step int, lamport uint64, isre, osre trajectoryEntry,
 		}
 		r.baseSet = true
 	}
-	r.steps = append(r.steps, retainedSnapshotStep{step, lamport, isre, osre, ops, allActives(machines)})
+	r.steps = append(r.steps, retainedSnapshotStep{step, instance, lamport, isre, osre, ops, allActives(machines)})
 	// Keep historyLimit steps; the newest one leaving becomes the base for the next.
 	for len(r.steps) > max(1, limit) {
 		r.base = r.steps[0].after
@@ -77,9 +91,11 @@ func (r *retention) onStep(step int, lamport uint64, isre, osre trajectoryEntry,
 	}
 }
 
-// restore: after a corpus restore nothing is retained, and the restored list is the base.
-func (r *retention) restore(base []activeEntry) {
-	r.base, r.baseSet, r.steps = base, true, nil
+// restore: after any restore nothing is retained, the live list is the next
+// step's base, and the restored K-line is the restore point until that step.
+func (r *retention) restore(live []activeEntry, kline map[string]any, arbitration any) {
+	r.base, r.baseSet, r.steps = live, true, nil
+	r.restored = &restorePoint{kline, arbitration}
 }
 
 func (r *retention) at(step int) *retainedSnapshotStep {
@@ -382,6 +398,9 @@ func (e *Engine) CaptureSnapshot(body map[string]any) (map[string]any, error) {
 	}
 	e.refreshCorpusFacts()
 	r := &e.retention
+	if len(r.steps) == 0 && r.restored != nil {
+		return e.captureRestored(r.restored, body, scope, ends)
+	}
 	if len(r.steps) == 0 {
 		return nil, refuse(http.StatusGone, "no step is retained")
 	}
@@ -481,9 +500,8 @@ func (e *Engine) CaptureSnapshot(body map[string]any) (map[string]any, error) {
 			"contributions": contribs})
 	}
 	clock := func(s *retainedSnapshotStep) map[string]any {
-		return map[string]any{"instance": e.instance.Instance(), "lamport": s.lamport, "step": s.step}
+		return map[string]any{"instance": s.instance, "lamport": s.lamport, "step": s.step}
 	}
-	controls, machineControls, overrides := e.snapshotState()
 	var arbitration any
 	if e.steps.controls.arbitrationRetention {
 		steps := []int{}
@@ -499,20 +517,27 @@ func (e *Engine) CaptureSnapshot(body map[string]any) (map[string]any, error) {
 		}
 		arbitration = list
 	}
+	return e.storeSnapshot(map[string]any{
+		"scope":        scopeJSON,
+		"span":         map[string]any{"from": from, "to": to},
+		"clocks":       map[string]any{"from": clock(r.at(from)), "to": clock(r.at(to))},
+		"activeBefore": activesJSON(onlyScope(before, scope)),
+		"pairs":        pairs,
+		"activeAfter":  activesJSON(onlyScope(r.at(to).after, scope)),
+		"sharedCells":  sharedJSON,
+	}, arbitration)
+}
+
+// storeSnapshot makes the body around a K-line, with the engine's corpus,
+// controls and overrides, digests and stores it.
+func (e *Engine) storeSnapshot(kline map[string]any, arbitration any) (map[string]any, error) {
+	controls, machineControls, overrides := e.snapshotState()
 	snap := map[string]any{
 		"format": "re-snapshot/1",
 		"corpus": map[string]any{"algorithm": "sha256/resident-declared-v1", "fingerprint": e.corpusFingerprint,
 			"machines": len(e.machines)},
 		"controls": controls, "machineControls": machineControls, "machineOverrides": overrides,
-		"kline": map[string]any{
-			"scope":        scopeJSON,
-			"span":         map[string]any{"from": from, "to": to},
-			"clocks":       map[string]any{"from": clock(r.at(from)), "to": clock(r.at(to))},
-			"activeBefore": activesJSON(onlyScope(before, scope)),
-			"pairs":        pairs,
-			"activeAfter":  activesJSON(onlyScope(r.at(to).after, scope)),
-			"sharedCells":  sharedJSON,
-		},
+		"kline":       kline,
 		"arbitration": arbitration,
 	}
 	snap, _ = normalize(snap).(map[string]any)
@@ -521,6 +546,43 @@ func (e *Engine) CaptureSnapshot(body map[string]any) (map[string]any, error) {
 	e.snapshots.put(id, snap)
 	kl := snap["kline"].(map[string]any)
 	return map[string]any{"id": id, "digest": snap["digest"], "span": kl["span"]}, nil
+}
+
+// captureRestored is a capture right after a restore (#904): the restored
+// K-line, when the request asks for its scope and span or leaves them out.
+func (e *Engine) captureRestored(rp *restorePoint, body map[string]any, scope map[string]bool,
+	ends [2]*int) (map[string]any, error) {
+	var restoredScope map[string]bool
+	if list, ok := rp.kline["scope"].([]any); ok {
+		restoredScope = map[string]bool{}
+		for _, n := range list {
+			if s, ok := n.(string); ok {
+				restoredScope[s] = true
+			}
+		}
+	}
+	_, isList := body["scope"].([]any)
+	scopeGiven := isList || body["scope"] == "corpus"
+	same := true
+	switch {
+	case scope != nil:
+		same = restoredScope != nil && len(restoredScope) == len(scope)
+		for n := range scope {
+			same = same && restoredScope[n]
+		}
+	case scopeGiven:
+		same = restoredScope == nil
+	}
+	span, _ := rp.kline["span"].(map[string]any)
+	for i, end := range []string{"from", "to"} {
+		if ends[i] != nil && float64(*ends[i]) != num(span[end]) {
+			same = false
+		}
+	}
+	if !same {
+		return nil, refuse(http.StatusGone, "no step is retained since the restore; only the restored snapshot is capturable")
+	}
+	return e.storeSnapshot(rp.kline, rp.arbitration)
 }
 
 // Snapshots is GET /api/runtime/snapshots.
@@ -665,7 +727,6 @@ func (e *Engine) restoreSnapshot(snap map[string]any) error {
 			}
 		}
 	}
-	var after []activeEntry
 	byMachine := map[string][]activeEntry{}
 	list, _ := kl["activeAfter"].([]any)
 	for _, raw := range list {
@@ -673,7 +734,6 @@ func (e *Engine) restoreSnapshot(snap map[string]any) error {
 		str := func(k string) string { s, _ := o[k].(string); return s }
 		jm, _ := o["justMatched"].(bool)
 		a := activeEntry{str("machine"), str("sequence"), str("event"), jm}
-		after = append(after, a)
 		byMachine[a.machine] = append(byMachine[a.machine], a)
 	}
 	for _, m := range e.machines {
@@ -693,6 +753,9 @@ func (e *Engine) restoreSnapshot(snap map[string]any) error {
 			}
 		}
 	}
+	// Any restore is a retention boundary (#904): the next step starts from the
+	// live list, and until it the restored snapshot is what a capture returns.
+	e.retention.restore(allActives(e.machines), kl, snap["arbitration"])
 	if corpusScope {
 		span, _ := kl["span"].(map[string]any)
 		to := int(num(span["to"]))
@@ -709,7 +772,6 @@ func (e *Engine) restoreSnapshot(snap map[string]any) error {
 		s.retained = map[int]retainedStep{}
 		s.nextStep = to + 1
 		e.completedStep = to
-		e.retention.restore(after)
 	}
 	if e.klines.controls.capture {
 		if err := e.klines.onReset(); err != nil {

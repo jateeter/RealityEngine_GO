@@ -746,7 +746,7 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	ops := klineOps(merges)
 	// Snapshot retention (#287): every retained step's active list,
 	// contributions and clock, whether or not K-line capture is on.
-	e.retention.onStep(n, lamport, isre, osre, ops, e.machines, e.steps.controls.historyLimit)
+	e.retention.onStep(n, e.instance.Instance(), lamport, isre, osre, ops, e.machines, e.steps.controls.historyLimit)
 	e.captureKlines(n, commit, machineResults, isre, osre, ops)
 	e.completedStep = n
 	timer.boundary(3)
