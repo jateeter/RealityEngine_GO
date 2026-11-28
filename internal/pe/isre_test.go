@@ -10,9 +10,11 @@ import (
 // test source, a mapped provider (OpenClaw is acp), feedback, an empty
 // origin (signal) and an unlisted one (unattributed).
 func TestIsreRunsJoinConsecutiveCellsWithOneWinner(t *testing.T) {
-	tax := loadTaxonomy(taxonomyDir("../../../RealityEngine_Machines/machines"), taxonomyVersion)
+	// A pinned copy of the corpus file (RealityEngine_Machines
+	// schemas/source-kinds/), so the test runs without a sibling checkout.
+	tax := loadTaxonomy("testdata", taxonomyVersion)
 	if tax == nil {
-		t.Skip("the Machines checkout carries no re-source-kinds/2")
+		t.Fatal("the pinned re-source-kinds/2 does not parse")
 	}
 	cells := []winner{
 		{cell: 3, kind: "test", id: "a"}, {cell: 4, kind: "test", id: "a"},
