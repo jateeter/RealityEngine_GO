@@ -380,6 +380,7 @@ func (e *Engine) RecycleClone(cloneID, generation string, present bool) (int, ma
 	if live.generation != g {
 		return refusal(http.StatusConflict, "generation is not the clone's", map[string]any{"generation": live.generation})
 	}
+	e.machineRemoved(cloneID)
 	delete(e.machines, cloneID)
 	delete(e.checkpoints, cloneID)
 	e.mappingVersion++

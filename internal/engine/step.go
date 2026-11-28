@@ -741,6 +741,9 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	e.steps.commit(isre, osre)
 	e.steps.retainArbitration(n, e.lastCommit, records)
 	e.steps.lastArbitration = records
+	// K-lines closed at this step are stored before its completion is
+	// published (RealityEngine_CI#603).
+	e.captureKlines(n, commit, machineResults, isre, osre, merges)
 	e.completedStep = n
 	timer.boundary(3)
 	e.steps.publish()

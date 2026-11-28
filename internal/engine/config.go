@@ -50,6 +50,9 @@ func (e *Engine) controls() []map[string]any {
 		control("includeActiveRegions", "engine", c.includeActiveRegions, d.includeActiveRegions),
 		control("includeMachineResults", "engine", c.includeMachineResults, d.includeMachineResults),
 		control("includePerceptualSpace", "engine", c.includePerceptualSpace, d.includePerceptualSpace),
+		control("klineCapture", "engine", e.klines.controls.capture, false),
+		control("klineFeedbackHops", "engine", e.klines.controls.feedbackHops, klineFeedbackHopsDefault),
+		control("klineStoreMaxBytes", "engine", e.klines.controls.storeMaxBytes, uint64(klineStoreMaxDefault)),
 		control("machineJsonSummary", "engine", e.machineJSONSummary, false),
 		control("phaseDetail", "engine", c.phaseDetail, d.phaseDetail),
 		control("transitionsInhibited", "machine", inhibited, false),
@@ -147,6 +150,33 @@ func (e *Engine) SetControl(name string, body map[string]any) (map[string]any, e
 		c.includeMachineResults, err = boolean()
 	case "includePerceptualSpace":
 		c.includePerceptualSpace, err = boolean()
+	case "klineCapture":
+		// Off stops capture and leaves the store untouched; on starts afresh,
+		// closing what the checkpoint holds (SURFACE_SPEC "Controls").
+		var on bool
+		if on, err = boolean(); err != nil {
+			break
+		}
+		if on && !e.klines.controls.capture {
+			if cerr := e.klines.startCapture(); cerr != nil {
+				e.klineFailed(cerr)
+			}
+		} else if !on {
+			e.klines.controls.capture = false
+		}
+	case "klineFeedbackHops":
+		h, ok := wholeIn(value, klineFeedbackHopsMax)
+		if !ok {
+			return nil, machine.BadRequest("klineFeedbackHops requires a whole-number `value` in [0, %d]", klineFeedbackHopsMax)
+		}
+		e.klines.controls.feedbackHops = h
+	case "klineStoreMaxBytes":
+		b, ok := wholeIn(value, klineStoreMaxMax)
+		if !ok {
+			return nil, machine.BadRequest("klineStoreMaxBytes requires a whole-number `value` in [0, %d]", int64(klineStoreMaxMax))
+		}
+		e.klines.controls.storeMaxBytes = uint64(b)
+		e.klines.refreshBudget()
 	case "machineJsonSummary":
 		e.machineJSONSummary, err = boolean()
 	case "phaseDetail":
@@ -200,6 +230,13 @@ func (e *Engine) ResetControl(name string) (map[string]any, error) {
 		c.includeMachineResults = d.includeMachineResults
 	case "includePerceptualSpace":
 		c.includePerceptualSpace = d.includePerceptualSpace
+	case "klineCapture":
+		e.klines.controls.capture = false
+	case "klineFeedbackHops":
+		e.klines.controls.feedbackHops = klineFeedbackHopsDefault
+	case "klineStoreMaxBytes":
+		e.klines.controls.storeMaxBytes = klineStoreMaxDefault
+		e.klines.refreshBudget()
 	case "machineJsonSummary":
 		e.machineJSONSummary = false
 	case "phaseDetail":

@@ -109,6 +109,12 @@ var Implemented = map[string]bool{
 	"RE GET /api/engine/osre-history":  true,
 	"RE GET /api/engine/steps/:n/pair": true,
 	"RE GET /api/arbitration":          true,
+	// K-lines (#17, RealityEngine_CI#603): the store and its routes.
+	"RE GET /api/klines":         true,
+	"RE GET /api/klines/open":    true,
+	"RE GET /api/klines/stats":   true,
+	"RE GET /api/klines/:id":     true,
+	"RE POST /api/klines/export": true,
 	// The control pathway, the runtime views and the diagnostic (#13, slice 3).
 	"RE GET /api/engine/config":             true,
 	"RE GET /api/engine/config/:control":    true,
