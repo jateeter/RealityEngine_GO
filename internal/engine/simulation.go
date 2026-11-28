@@ -141,6 +141,7 @@ func (e *Engine) resetSpace() {
 		m.Reset()
 	}
 	e.steps.reset()
+	e.retention.onReset()
 	e.sim.rewind()
 	e.completedStep = -1
 }

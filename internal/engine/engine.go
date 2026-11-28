@@ -70,6 +70,10 @@ type Engine struct {
 	klines             *klineTracker
 	corpusFingerprint  string
 	fingerprintVersion int
+	// Runtime snapshots (RealityEngine_CI#287, #17): every retained step's
+	// active list, contributions and clock, and the snapshot store.
+	retention retention
+	snapshots *snapshotStore
 }
 
 // DefaultDimension is the perceptual space's width when VECTOR_DIMENSION is
@@ -88,7 +92,7 @@ func New(machinesDir string, dimension int) (*Engine, error) {
 		sequences: map[string]storedSequence{}, instance: instance.Minted(), completedStep: -1,
 		steps: newStepState(machinesDir), threshold: defaultThreshold, vectors: map[string]map[string]any{},
 		sampler: newSampler(), coverage: newCoverage(), clones: newCloneSpace(),
-		fingerprintVersion: -1,
+		fingerprintVersion: -1, snapshots: snapshotStoreFromEnvironment(),
 	}
 	memory, _ := openKlineStore("")
 	e.klines = newKlineTracker(e.instance, memory)

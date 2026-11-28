@@ -102,6 +102,11 @@ func wholeIn(v any, limit float64) (int, bool) {
 func (e *Engine) SetControl(name string, body map[string]any) (map[string]any, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.setControl(name, body)
+}
+
+// setControl is SetControl under the caller's write lock (a restore holds it).
+func (e *Engine) setControl(name string, body map[string]any) (map[string]any, error) {
 	if _, err := e.control(name); err != nil {
 		return nil, err
 	}

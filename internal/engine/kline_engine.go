@@ -89,8 +89,8 @@ func (e *Engine) refreshCorpusFacts() {
 	}
 	for _, m := range e.machines {
 		var body any = map[string]any{"name": m.Name}
-		if m.Raw != nil {
-			body = m.Raw
+		if m.Declared != nil {
+			body = m.Declared
 		}
 		declared = append(declared, [2]any{m.Name, body})
 		for _, seq := range m.Sequences {
@@ -108,20 +108,25 @@ func (e *Engine) refreshCorpusFacts() {
 
 // captureKlines hands a committed step to the tracker. The caller holds the
 // write lock.
-func (e *Engine) captureKlines(n int, commit uint64, results map[string]map[string]any, isre, osre trajectoryEntry, merges []mergeOperation) {
+func (e *Engine) captureKlines(n int, commit uint64, results map[string]map[string]any, isre, osre trajectoryEntry, ops []klineOp) {
 	if !e.klines.controls.capture {
 		return
 	}
 	e.refreshCorpusFacts()
-	ops := make([]klineOp, len(merges))
-	for i, m := range merges {
-		ops[i] = klineOp{m.machineName, kRegion{m.offset, m.length}, m.values, m.sequenceIDs}
-	}
 	view := stepView{step: n, commit: commit, machines: e.machines, results: results, isre: isre, osre: osre,
 		ops: ops, fingerprint: e.corpusFingerprint}
 	if err := e.klines.onStep(view); err != nil {
 		e.klineFailed(err)
 	}
+}
+
+// klineOps is a step's mergeBatch, by corpus name.
+func klineOps(merges []mergeOperation) []klineOp {
+	ops := make([]klineOp, len(merges))
+	for i, m := range merges {
+		ops[i] = klineOp{m.machineName, kRegion{m.offset, m.length}, m.values, m.sequenceIDs}
+	}
+	return ops
 }
 
 // Klines is GET /api/klines.
