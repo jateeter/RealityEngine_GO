@@ -75,16 +75,21 @@ func (s *Sequence) EventIDs() []string { return sortedKeys(s.Events) }
 
 // Machine is a loaded machine definition and its run state.
 type Machine struct {
-	ID                   string
-	Name                 string
-	Description          string
-	InputOffset          int
-	InputLength          int
-	MatchAlgorithm       string // lower-cased; default gte
-	ArbiterRule          string // lower-cased; default passthrough
-	OutputMerge          string // lower-cased outputMergeTransformation; default or
-	OutputAlphabetTop    *int
-	Raw                  map[string]any // the machine object as declared
+	ID                string
+	Name              string
+	Description       string
+	InputOffset       int
+	InputLength       int
+	MatchAlgorithm    string // lower-cased; default gte
+	ArbiterRule       string // lower-cased; default passthrough
+	OutputMerge       string // lower-cased outputMergeTransformation; default or
+	OutputAlphabetTop *int
+	Raw               map[string]any // the machine object as declared
+	// Declared is the machine object as its corpus file or request body
+	// declared it, without what ingestion assigns (no id): the corpus
+	// fingerprint's input (SURFACE_SPEC "Corpus fingerprint"). Raw is changed
+	// by ingestion; Declared never is.
+	Declared             map[string]any
 	Sequences            map[string]*Sequence
 	TransitionsInhibited bool
 	// SourceFile is the corpus file name it was loaded from; empty for a
@@ -262,6 +267,8 @@ func Parse(data []byte) (*Machine, error) {
 		Raw:            obj,
 		Sequences:      sequences,
 	}
+	m.Declared, _ = deepCopy(obj).(map[string]any)
+	delete(m.Declared, "id")
 	if top, ok := mapping["outputAlphabetTop"].(float64); ok && top >= 0 && top == math.Trunc(top) {
 		t := int(top)
 		m.OutputAlphabetTop = &t

@@ -155,7 +155,8 @@ func TestUnsupportedAndUnknownRoutes(t *testing.T) {
 		status                  int
 		surface                 string
 	}{
-		{"RE", http.MethodPost, "/api/runtime/snapshot", http.StatusNotImplemented, "POST /api/runtime/snapshot"},
+		// Every specified route is served (146 of 146), so none is left to
+		// answer unsupported; an unknown route is a plain 404.
 		{"PE", http.MethodGet, "/api/arbitration", http.StatusNotFound, ""},
 		{"RE", http.MethodGet, "/api/not-specified", http.StatusNotFound, ""},
 		{"RE", http.MethodDelete, "/api/health", http.StatusNotFound, ""},

@@ -115,6 +115,18 @@ var Implemented = map[string]bool{
 	"RE GET /api/klines/stats":   true,
 	"RE GET /api/klines/:id":     true,
 	"RE POST /api/klines/export": true,
+	// Runtime snapshots (#17, RealityEngine_CI#287).
+	"RE POST /api/runtime/snapshot":       true,
+	"RE GET /api/runtime/snapshots":       true,
+	"RE GET /api/runtime/snapshot/:id":    true,
+	"RE DELETE /api/runtime/snapshot/:id": true,
+	"RE POST /api/runtime/restore":        true,
+	// The same five, as SURFACE_SPEC also lists them in the phase-2 table.
+	"RE-phase2 POST /api/runtime/snapshot":       true,
+	"RE-phase2 GET /api/runtime/snapshots":       true,
+	"RE-phase2 GET /api/runtime/snapshot/:id":    true,
+	"RE-phase2 DELETE /api/runtime/snapshot/:id": true,
+	"RE-phase2 POST /api/runtime/restore":        true,
 	// The control pathway, the runtime views and the diagnostic (#13, slice 3).
 	"RE GET /api/engine/config":             true,
 	"RE GET /api/engine/config/:control":    true,

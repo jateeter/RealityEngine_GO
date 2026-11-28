@@ -64,6 +64,11 @@ func writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, me.Status, map[string]string{"error": me.Message})
 		return
 	}
+	var sErr *engine.SnapshotError
+	if errors.As(err, &sErr) {
+		writeJSON(w, sErr.Status, sErr.Body)
+		return
+	}
 	var pErr *pe.Error
 	if errors.As(err, &pErr) {
 		writeJSON(w, pErr.Status, map[string]string{"error": pErr.Message})
@@ -370,6 +375,24 @@ func machineRoutes(eng *engine.Engine) map[string]http.Handler {
 			}
 			body, err := eng.StepPair(n, timeout)
 			answer(w, body, err)
+		}),
+		"RE POST /api/runtime/snapshot": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.CaptureSnapshot(body)
+		}),
+		"RE GET /api/runtime/snapshots": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			body, err := eng.Snapshots()
+			answer(w, body, err)
+		}),
+		"RE GET /api/runtime/snapshot/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.Snapshot(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE DELETE /api/runtime/snapshot/:id": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := eng.DeleteSnapshot(r.PathValue("id"))
+			answer(w, body, err)
+		}),
+		"RE POST /api/runtime/restore": withBody(func(_ *http.Request, body map[string]any) (any, error) {
+			return eng.RestoreSnapshot(body)
 		}),
 		"RE GET /api/klines": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			q := func(key string) *string {

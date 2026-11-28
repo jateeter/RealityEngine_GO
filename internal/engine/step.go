@@ -743,7 +743,11 @@ func (e *Engine) runPhases(n int, override string) (*step, error) {
 	e.steps.lastArbitration = records
 	// K-lines closed at this step are stored before its completion is
 	// published (RealityEngine_CI#603).
-	e.captureKlines(n, commit, machineResults, isre, osre, merges)
+	ops := klineOps(merges)
+	// Snapshot retention (#287): every retained step's active list,
+	// contributions and clock, whether or not K-line capture is on.
+	e.retention.onStep(n, lamport, isre, osre, ops, e.machines, e.steps.controls.historyLimit)
+	e.captureKlines(n, commit, machineResults, isre, osre, ops)
 	e.completedStep = n
 	timer.boundary(3)
 	e.steps.publish()
